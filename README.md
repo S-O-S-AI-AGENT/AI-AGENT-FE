@@ -1,8 +1,44 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Project Agent
 
-## Getting Started
+1인 기업과 중소기업을 위한 AI 기반 개발 및 운영 도구 모음입니다.
 
-First, run the development server:
+## 🚀 주요 기능
+
+### 1. SQL 튜너
+
+- AI 기반 SQL 쿼리 최적화
+- 성능 분석 및 개선 제안
+- 인덱스 추천 기능
+
+### 2. E2E 자동 테스터
+
+- Playwright 기반 자동화 테스트
+- 시각적 테스트 빌더
+- CI/CD 통합 지원
+
+### 3. Text2SQL
+
+- 자연어를 SQL 쿼리로 변환
+- 데이터베이스 스키마 인식
+- 복잡한 쿼리도 자동 생성
+
+### 4. 로그 분석기
+
+- AI 기반 로그 패턴 분석
+- 실시간 이슈 탐지
+- 자동 개선 권장사항 제공
+
+## 🛠 기술 스택
+
+- **Frontend**: Next.js 15.5.3, React 19, TypeScript
+- **Styling**: Tailwind CSS 4.0
+- **UI Components**: Radix UI, Lucide React
+- **Testing**: Playwright
+- **Code Editor**: Monaco Editor
+
+## 🏃‍♂️ 시작하기
+
+### 개발 서버 실행
 
 ```bash
 npm run dev
@@ -10,15 +46,16 @@ npm run dev
 yarn dev
 # or
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+브라우저에서 [http://localhost:3000](http://localhost:3000)을 열어 결과를 확인하세요.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 테스트 실행
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run test        # Playwright 테스트 실행
+npm run test:ui     # 테스트 UI 모드
+```
 
 ## Learn More
 
