@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { Icons } from "../components/Icons";
 
 export default function Home() {
   const [isDarkMode, setIsDarkMode] = useState(false);

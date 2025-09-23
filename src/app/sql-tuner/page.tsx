@@ -159,36 +159,47 @@ LIMIT 100;
               }`}
             >
               🛠️ AI 기반 SQL 쿼리 최적화
-            </h2>            <p className={`${
-              isDarkMode ? "text-slate-400" : "text-slate-700"
-            }`}>
+            </h2>{" "}
+            <p
+              className={`${isDarkMode ? "text-slate-400" : "text-slate-700"}`}
+            >
               SQL 쿼리를 입력하면 AI가 성능을 분석하고 최적화된 쿼리를
               제안합니다.
             </p>
           </div>
-
           <div className="grid lg:grid-cols-2 gap-8">
             {/* 입력 영역 */}
-            <div className="space-y-4">              <h3 className={`text-xl font-semibold ${
-                isDarkMode ? "text-slate-100" : "text-slate-900"
-              }`}>
+            <div className="space-y-4">
+              {" "}
+              <h3
+                className={`text-xl font-semibold ${
+                  isDarkMode ? "text-slate-100" : "text-slate-900"
+                }`}
+              >
                 원본 SQL 쿼리
-              </h3>                <div className={`rounded-lg shadow-lg p-4 ${
+              </h3>{" "}
+              <div
+                className={`rounded-lg shadow-lg p-4 ${
                   isDarkMode ? "bg-slate-800" : "bg-white"
-                }`}>
+                }`}
+              >
                 <textarea
                   value={originalSQL}
                   onChange={(e) => setOriginalSQL(e.target.value)}
                   placeholder="SQL 쿼리를 입력하세요..."
                   className={`w-full h-64 p-4 font-mono text-sm rounded border resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                    isDarkMode 
-                      ? "bg-slate-900 text-white border-slate-700 placeholder-slate-400" 
+                    isDarkMode
+                      ? "bg-slate-900 text-white border-slate-700 placeholder-slate-400"
                       : "bg-slate-50 text-slate-900 border-slate-300 placeholder-slate-500"
                   }`}
                 />
-                <div className="flex justify-between items-center mt-4">                  <span className={`text-sm ${
-                    isDarkMode ? "text-slate-400" : "text-slate-600"
-                  }`}>
+                <div className="flex justify-between items-center mt-4">
+                  {" "}
+                  <span
+                    className={`text-sm ${
+                      isDarkMode ? "text-slate-400" : "text-slate-600"
+                    }`}
+                  >
                     {originalSQL.length} 문자
                   </span>
                   <button
@@ -213,21 +224,27 @@ LIMIT 100;
             </div>
 
             {/* 결과 영역 */}
-            <div className="space-y-4">              <h3 className={`text-xl font-semibold ${
-                isDarkMode ? "text-slate-100" : "text-slate-900"
-              }`}>
+            <div className="space-y-4">
+              {" "}
+              <h3
+                className={`text-xl font-semibold ${
+                  isDarkMode ? "text-slate-100" : "text-slate-900"
+                }`}
+              >
                 최적화된 SQL 쿼리
               </h3>
-              <div className={`rounded-lg shadow-lg p-4 ${
-                isDarkMode ? "bg-slate-800" : "bg-white"
-              }`}>
+              <div
+                className={`rounded-lg shadow-lg p-4 ${
+                  isDarkMode ? "bg-slate-800" : "bg-white"
+                }`}
+              >
                 <textarea
                   value={optimizedSQL}
                   readOnly
                   placeholder="최적화된 쿼리가 여기에 표시됩니다..."
                   className={`w-full h-64 p-4 font-mono text-sm rounded border resize-none ${
-                    isDarkMode 
-                      ? "bg-slate-900 text-white border-slate-700 placeholder-slate-400" 
+                    isDarkMode
+                      ? "bg-slate-900 text-white border-slate-700 placeholder-slate-400"
                       : "bg-slate-50 text-slate-900 border-slate-300 placeholder-slate-500"
                   }`}
                 />
@@ -246,16 +263,21 @@ LIMIT 100;
               </div>
             </div>
           </div>
-
           {/* 분석 결과 */}
           {analysis && (
-            <div className="mt-8 grid md:grid-cols-2 gap-8">              {/* 성능 개선 사항 */}
-              <div className={`rounded-lg shadow-lg p-6 ${
-                isDarkMode ? "bg-slate-800" : "bg-white"
-              }`}>
-                <h4 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
-                  isDarkMode ? "text-slate-100" : "text-slate-900"
-                }`}>
+            <div className="mt-8 grid md:grid-cols-2 gap-8">
+              {" "}
+              {/* 성능 개선 사항 */}
+              <div
+                className={`rounded-lg shadow-lg p-6 ${
+                  isDarkMode ? "bg-slate-800" : "bg-white"
+                }`}
+              >
+                <h4
+                  className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
+                    isDarkMode ? "text-slate-100" : "text-slate-900"
+                  }`}
+                >
                   <Icons.TrendingUp />
                   개선 사항
                 </h4>
@@ -268,15 +290,19 @@ LIMIT 100;
                         impact: string;
                         description: string;
                       },
-                      index: number
+                      index: number,
                     ) => (
                       <div
                         key={index}
                         className="border-l-4 border-blue-500 pl-4"
                       >
-                        <div className="flex items-center gap-2 mb-1">                          <span className={`font-medium ${
-                            isDarkMode ? "text-slate-100" : "text-slate-900"
-                          }`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          {" "}
+                          <span
+                            className={`font-medium ${
+                              isDarkMode ? "text-slate-100" : "text-slate-900"
+                            }`}
+                          >
                             {improvement.type}
                           </span>
                           <span
@@ -290,43 +316,56 @@ LIMIT 100;
                           >
                             {improvement.impact}
                           </span>
-                        </div>                        <p className={`text-sm ${
-                          isDarkMode ? "text-slate-400" : "text-slate-700"
-                        }`}>
+                        </div>{" "}
+                        <p
+                          className={`text-sm ${
+                            isDarkMode ? "text-slate-400" : "text-slate-700"
+                          }`}
+                        >
                           {improvement.description}
                         </p>
                       </div>
-                    )
+                    ),
                   )}
-                </div>              </div>
-
+                </div>{" "}
+              </div>
               {/* 성능 지표 */}
-              <div className={`rounded-lg shadow-lg p-6 ${
-                isDarkMode ? "bg-slate-800" : "bg-white"
-              }`}>
-                <h4 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
-                  isDarkMode ? "text-slate-100" : "text-slate-900"
-                }`}>
+              <div
+                className={`rounded-lg shadow-lg p-6 ${
+                  isDarkMode ? "bg-slate-800" : "bg-white"
+                }`}
+              >
+                <h4
+                  className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
+                    isDarkMode ? "text-slate-100" : "text-slate-900"
+                  }`}
+                >
                   <Icons.Clock />
                   성능 지표
                 </h4>
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <span className={`${
-                      isDarkMode ? "text-slate-400" : "text-slate-700"
-                    }`}>
+                    <span
+                      className={`${
+                        isDarkMode ? "text-slate-400" : "text-slate-700"
+                      }`}
+                    >
                       기존 실행 시간
                     </span>
-                    <span className={`font-mono text-lg ${
-                      isDarkMode ? "text-slate-100" : "text-slate-900"
-                    }`}>
+                    <span
+                      className={`font-mono text-lg ${
+                        isDarkMode ? "text-slate-100" : "text-slate-900"
+                      }`}
+                    >
                       {analysis.performance.originalTime}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className={`${
-                      isDarkMode ? "text-slate-400" : "text-slate-700"
-                    }`}>
+                    <span
+                      className={`${
+                        isDarkMode ? "text-slate-400" : "text-slate-700"
+                      }`}
+                    >
                       최적화 후 시간
                     </span>
                     <span className="font-mono text-lg text-green-600 font-semibold">
@@ -335,9 +374,11 @@ LIMIT 100;
                   </div>
                   <div className="border-t pt-4">
                     <div className="flex justify-between items-center">
-                      <span className={`font-semibold ${
-                        isDarkMode ? "text-slate-100" : "text-slate-900"
-                      }`}>
+                      <span
+                        className={`font-semibold ${
+                          isDarkMode ? "text-slate-100" : "text-slate-900"
+                        }`}
+                      >
                         성능 향상
                       </span>
                       <span className="text-2xl font-bold text-green-600">
@@ -348,21 +389,28 @@ LIMIT 100;
                 </div>
               </div>
             </div>
-          )}          {/* 도움말 */}
-          <div className={`mt-8 rounded-lg p-6 ${
-            isDarkMode ? "bg-blue-900/20" : "bg-blue-50"
-          }`}>
+          )}{" "}
+          {/* 도움말 */}
+          <div
+            className={`mt-8 rounded-lg p-6 ${
+              isDarkMode ? "bg-blue-900/20" : "bg-blue-50"
+            }`}
+          >
             <div className="flex items-start gap-3">
               <Icons.AlertCircle />
               <div>
-                <h5 className={`font-semibold mb-2 ${
-                  isDarkMode ? "text-blue-100" : "text-blue-900"
-                }`}>
+                <h5
+                  className={`font-semibold mb-2 ${
+                    isDarkMode ? "text-blue-100" : "text-blue-900"
+                  }`}
+                >
                   사용 팁
                 </h5>
-                <ul className={`text-sm space-y-1 ${
-                  isDarkMode ? "text-blue-200" : "text-blue-800"
-                }`}>
+                <ul
+                  className={`text-sm space-y-1 ${
+                    isDarkMode ? "text-blue-200" : "text-blue-800"
+                  }`}
+                >
                   <li>
                     • 완전한 SQL 쿼리를 입력해주세요 (SELECT, FROM, WHERE 등)
                   </li>
