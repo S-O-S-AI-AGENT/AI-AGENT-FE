@@ -18,13 +18,14 @@ export default function Guide() {
   useEffect(() => {
     localStorage.setItem("guide-dark-mode", JSON.stringify(isDarkMode));
   }, [isDarkMode]);
-
   const sections = [
     { id: "overview", title: "개요", icon: "📚" },
     { id: "sql-tuner", title: "SQL 튜너", icon: "🛠️" },
     { id: "text2sql", title: "Text2SQL", icon: "💬" },
     { id: "log-analyzer", title: "Log 분석기", icon: "📊" },
     { id: "e2e-tester", title: "E2E 테스터", icon: "🧪" },
+    { id: "figma-generator", title: "Figma 생성기", icon: "🎨" },
+    { id: "codebase-generator", title: "코드베이스 생성기", icon: "🚀" },
     { id: "tips", title: "팁 & 트릭", icon: "💡" },
   ];
 
@@ -46,7 +47,8 @@ export default function Guide() {
                 isDarkMode ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              AI Project Agent는 개발자를 위한 4가지 핵심 도구를 제공합니다. 각
+              {" "}
+              AI Project Agent는 개발자를 위한 6가지 핵심 도구를 제공합니다. 각
               도구는 AI 기술을 활용하여 개발 프로세스를 효율화합니다.
             </p>
           </div>
@@ -83,6 +85,28 @@ export default function Guide() {
                   "시각적 테스트 구성",
                   "다중 브라우저 지원",
                   "결과 리포트",
+                ],
+              },
+              {
+                icon: "🎨",
+                title: "Figma 디자인 생성기",
+                description:
+                  "AI가 Figma를 활용하여 자동으로 UI/UX 디자인을 생성합니다.",
+                features: [
+                  "프로젝트 요구사항 분석",
+                  "자동 컴포넌트 생성",
+                  "Figma 파일 출력",
+                ],
+              },
+              {
+                icon: "🚀",
+                title: "코드베이스 생성기",
+                description:
+                  "프로젝트 요구사항을 분석하여 최적화된 코드베이스를 생성합니다.",
+                features: [
+                  "기술 스택 자동 선정",
+                  "프로젝트 구조 생성",
+                  "개발 컨벤션 적용",
                 ],
               },
             ].map((tool, index) => (
@@ -619,7 +643,6 @@ export default function Guide() {
               </div>
             </div>
           </div>
-
           <div>
             <h3
               className={`text-xl font-bold mb-4 ${
@@ -654,6 +677,390 @@ export default function Guide() {
                   </p>
                 </div>
               ))}
+            </div>
+          </div>{" "}
+        </div>
+      ),
+    },
+    "figma-generator": {
+      title: "🎨 Figma 디자인 생성기 사용법",
+      content: (
+        <div className="space-y-8">
+          <div
+            className={`p-6 rounded-xl ${
+              isDarkMode
+                ? "bg-pink-900/20 border border-pink-700/30"
+                : "bg-pink-50 border border-pink-200"
+            }`}
+          >
+            <h3
+              className={`text-xl font-bold mb-4 ${
+                isDarkMode ? "text-pink-300" : "text-pink-900"
+              }`}
+            >
+              🎯 디자인 생성 과정
+            </h3>
+            <div className="space-y-4">
+              {[
+                {
+                  step: 1,
+                  title: "프로젝트 정보 입력",
+                  desc: "프로젝트 타입, 산업 분야, 디자인 스타일 선택",
+                  icon: "📋",
+                },
+                {
+                  step: 2,
+                  title: "요구사항 설정",
+                  desc: "타겟 사용자, 필요한 컴포넌트, 색상 선호도 입력",
+                  icon: "⚙️",
+                },
+                {
+                  step: 3,
+                  title: "AI 디자인 생성",
+                  desc: "설정된 조건에 따라 AI가 자동으로 디자인 생성",
+                  icon: "🤖",
+                },
+                {
+                  step: 4,
+                  title: "Figma 파일 출력",
+                  desc: "완성된 디자인을 Figma 파일로 다운로드",
+                  icon: "📁",
+                },
+              ].map((item) => (
+                <div key={item.step} className="flex items-start gap-4">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                        isDarkMode
+                          ? "bg-pink-600 text-white"
+                          : "bg-pink-600 text-white"
+                      }`}
+                    >
+                      {item.step}
+                    </div>
+                    <span className="text-xl">{item.icon}</span>
+                  </div>
+                  <div>
+                    <h4
+                      className={`font-semibold ${
+                        isDarkMode ? "text-white" : "text-gray-900"
+                      }`}
+                    >
+                      {item.title}
+                    </h4>
+                    <p
+                      className={`text-sm ${
+                        isDarkMode ? "text-gray-300" : "text-gray-600"
+                      }`}
+                    >
+                      {item.desc}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h3
+              className={`text-xl font-bold mb-4 ${
+                isDarkMode ? "text-white" : "text-gray-900"
+              }`}
+            >
+              🎨 지원하는 디자인 유형
+            </h3>
+            <div className="grid md:grid-cols-3 gap-4">
+              {[
+                { name: "웹 애플리케이션", desc: "대시보드, SaaS 플랫폼" },
+                { name: "모바일 앱", desc: "iOS, Android 네이티브 디자인" },
+                { name: "랜딩 페이지", desc: "마케팅, 프로덕트 소개 페이지" },
+                { name: "이커머스", desc: "온라인 쇼핑몰, 마켓플레이스" },
+                { name: "포트폴리오", desc: "개인, 기업 포트폴리오 사이트" },
+                { name: "관리자 패널", desc: "백오피스, 관리 시스템" },
+              ].map((type, index) => (
+                <div
+                  key={index}
+                  className={`p-4 rounded-lg ${
+                    isDarkMode
+                      ? "bg-gray-800/50 border border-gray-700"
+                      : "bg-white/70 border border-gray-200"
+                  }`}
+                >
+                  <h4
+                    className={`font-semibold mb-1 ${
+                      isDarkMode ? "text-white" : "text-gray-900"
+                    }`}
+                  >
+                    {type.name}
+                  </h4>
+                  <p
+                    className={`text-xs ${
+                      isDarkMode ? "text-gray-400" : "text-gray-500"
+                    }`}
+                  >
+                    {type.desc}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h3
+              className={`text-xl font-bold mb-4 ${
+                isDarkMode ? "text-white" : "text-gray-900"
+              }`}
+            >
+              💡 디자인 팁
+            </h3>
+            <div className="grid md:grid-cols-2 gap-4">
+              {[
+                "명확한 브랜드 가이드라인 제공하기",
+                "타겟 사용자를 구체적으로 정의하기",
+                "참고할 만한 디자인 예시 첨부하기",
+                "필수 기능과 선택 기능 구분하기",
+                "반응형 디자인 요구사항 명시하기",
+                "접근성 가이드라인 고려하기",
+              ].map((tip, index) => (
+                <div
+                  key={index}
+                  className={`p-4 rounded-lg ${
+                    isDarkMode ? "bg-gray-800/50" : "bg-white/70"
+                  } border ${
+                    isDarkMode ? "border-gray-700" : "border-gray-200"
+                  }`}
+                >
+                  <p
+                    className={`text-sm ${
+                      isDarkMode ? "text-gray-300" : "text-gray-600"
+                    }`}
+                  >
+                    ✨ {tip}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    "codebase-generator": {
+      title: "🚀 코드베이스 생성기 사용법",
+      content: (
+        <div className="space-y-8">
+          <div
+            className={`p-6 rounded-xl ${
+              isDarkMode
+                ? "bg-cyan-900/20 border border-cyan-700/30"
+                : "bg-cyan-50 border border-cyan-200"
+            }`}
+          >
+            <h3
+              className={`text-xl font-bold mb-4 ${
+                isDarkMode ? "text-cyan-300" : "text-cyan-900"
+              }`}
+            >
+              🛠️ 4단계 프로젝트 생성
+            </h3>
+            <div className="space-y-6">
+              {[
+                {
+                  step: "1단계",
+                  title: "프로젝트 정보",
+                  items: ["프로젝트명 입력", "상세 설명 작성"],
+                  icon: "📝",
+                },
+                {
+                  step: "2단계",
+                  title: "팀 & 난이도",
+                  items: ["타겟 사용자 정의", "팀 규모 선택", "난이도 설정"],
+                  icon: "👥",
+                },
+                {
+                  step: "3단계",
+                  title: "플랫폼 & 기능",
+                  items: ["지원 플랫폼 선택", "필요 기능 체크"],
+                  icon: "🔧",
+                },
+                {
+                  step: "4단계",
+                  title: "기술 스택",
+                  items: [
+                    "AI 추천 받기",
+                    "프레임워크 선택",
+                    "데이터베이스 선택",
+                  ],
+                  icon: "⚙️",
+                },
+              ].map((phase, index) => (
+                <div key={index}>
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="text-2xl">{phase.icon}</span>
+                    <div>
+                      <h4
+                        className={`font-semibold ${
+                          isDarkMode ? "text-white" : "text-gray-900"
+                        }`}
+                      >
+                        {phase.step}: {phase.title}
+                      </h4>
+                    </div>
+                  </div>
+                  <ul className="ml-8 space-y-1">
+                    {phase.items.map((item, itemIndex) => (
+                      <li
+                        key={itemIndex}
+                        className={`flex items-center gap-2 text-sm ${
+                          isDarkMode ? "text-gray-300" : "text-gray-600"
+                        }`}
+                      >
+                        <span className="text-cyan-500">•</span>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h3
+              className={`text-xl font-bold mb-4 ${
+                isDarkMode ? "text-white" : "text-gray-900"
+              }`}
+            >
+              🎯 지원하는 프로젝트 유형
+            </h3>
+            <div className="grid md:grid-cols-2 gap-4">
+              {[
+                {
+                  type: "웹 애플리케이션",
+                  tech: "React, Vue, Angular + Node.js",
+                  use: "SaaS, 관리 시스템, 포털",
+                },
+                {
+                  type: "모바일 앱",
+                  tech: "React Native, Flutter",
+                  use: "iOS/Android 네이티브 앱",
+                },
+                {
+                  type: "API 서버",
+                  tech: "Express, FastAPI, Spring Boot",
+                  use: "백엔드 API, 마이크로서비스",
+                },
+                {
+                  type: "데스크톱 앱",
+                  tech: "Electron, Tauri",
+                  use: "크로스 플랫폼 데스크톱",
+                },
+                {
+                  type: "풀스택 앱",
+                  tech: "Next.js, Nuxt.js",
+                  use: "통합된 프론트엔드 + 백엔드",
+                },
+                {
+                  type: "정적 사이트",
+                  tech: "Gatsby, Hugo, Jekyll",
+                  use: "블로그, 포트폴리오, 문서",
+                },
+              ].map((project, index) => (
+                <div
+                  key={index}
+                  className={`p-4 rounded-lg ${
+                    isDarkMode
+                      ? "bg-gray-800/50 border border-gray-700"
+                      : "bg-white/70 border border-gray-200"
+                  }`}
+                >
+                  <h4
+                    className={`font-semibold mb-2 ${
+                      isDarkMode ? "text-white" : "text-gray-900"
+                    }`}
+                  >
+                    {project.type}
+                  </h4>
+                  <p
+                    className={`text-xs mb-1 ${
+                      isDarkMode ? "text-cyan-400" : "text-cyan-600"
+                    }`}
+                  >
+                    🔧 {project.tech}
+                  </p>
+                  <p
+                    className={`text-xs ${
+                      isDarkMode ? "text-gray-400" : "text-gray-500"
+                    }`}
+                  >
+                    💡 {project.use}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h3
+              className={`text-xl font-bold mb-4 ${
+                isDarkMode ? "text-white" : "text-gray-900"
+              }`}
+            >
+              ⚡ AI 추천 시스템
+            </h3>
+            <div
+              className={`p-6 rounded-lg ${
+                isDarkMode
+                  ? "bg-gray-800/50 border border-gray-700"
+                  : "bg-white/70 border border-gray-200"
+              }`}
+            >
+              <p
+                className={`mb-4 ${
+                  isDarkMode ? "text-gray-300" : "text-gray-600"
+                }`}
+              >
+                AI가 프로젝트 정보를 분석하여 최적의 기술 스택을 추천합니다:
+              </p>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <h5
+                    className={`font-semibold mb-2 ${
+                      isDarkMode ? "text-white" : "text-gray-900"
+                    }`}
+                  >
+                    🧠 분석 요소
+                  </h5>
+                  <ul
+                    className={`space-y-1 text-sm ${
+                      isDarkMode ? "text-gray-400" : "text-gray-600"
+                    }`}
+                  >
+                    <li>• 프로젝트 복잡도</li>
+                    <li>• 팀 규모 및 경험</li>
+                    <li>• 성능 요구사항</li>
+                    <li>• 확장성 필요성</li>
+                  </ul>
+                </div>
+                <div>
+                  <h5
+                    className={`font-semibold mb-2 ${
+                      isDarkMode ? "text-white" : "text-gray-900"
+                    }`}
+                  >
+                    📦 포함 항목
+                  </h5>
+                  <ul
+                    className={`space-y-1 text-sm ${
+                      isDarkMode ? "text-gray-400" : "text-gray-600"
+                    }`}
+                  >
+                    <li>• 프로젝트 구조</li>
+                    <li>• 설정 파일들</li>
+                    <li>• 기본 컴포넌트</li>
+                    <li>• 개발 도구 설정</li>
+                  </ul>
+                </div>
+              </div>
             </div>
           </div>
         </div>

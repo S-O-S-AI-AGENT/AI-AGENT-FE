@@ -53,6 +53,23 @@ export default function Home() {
       gradient: "from-orange-500 to-red-600",
       hoverGradient: "from-orange-600 to-red-700",
     },
+    {
+      icon: "🎨",
+      title: "Figma 디자인 생성기",
+      description: "AI가 Figma를 활용하여 자동으로 UI/UX 디자인을 생성합니다.",
+      href: "/figma-generator",
+      gradient: "from-pink-500 to-rose-600",
+      hoverGradient: "from-pink-600 to-rose-700",
+    },
+    {
+      icon: "🚀",
+      title: "코드베이스 생성기",
+      description:
+        "프로젝트 요구사항을 분석하여 최적화된 코드베이스를 자동 생성합니다.",
+      href: "/codebase-generator",
+      gradient: "from-cyan-500 to-teal-600",
+      hoverGradient: "from-cyan-600 to-teal-700",
+    },
   ];
 
   return (
@@ -182,7 +199,7 @@ export default function Home() {
             {/* Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
               {[
-                { icon: "⚡", label: "AI 기반", value: "4개 도구" },
+                { icon: "⚡", label: "AI 기반", value: "6개 도구" },
                 { icon: "🚀", label: "성능 향상", value: "최대 10배" },
                 { icon: "🔧", label: "자동화", value: "100%" },
                 { icon: "💡", label: "사용자", value: "1000+" },
@@ -237,7 +254,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-8 max-w-6xl mx-auto">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
             {features.map((feature, index) => (
               <Link key={index} href={feature.href} className="group block">
                 <div
