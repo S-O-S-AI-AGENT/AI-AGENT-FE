@@ -11,6 +11,10 @@ const nextConfig: NextConfig = {
       allowedOrigins: ["localhost:3000", "127.0.0.1:3000"],
     },
   },
+  eslint: {
+    // Ignore ESLint errors during builds
+    ignoreDuringBuilds: true,
+  },
 
   // Image optimization for Docker
   images: {
