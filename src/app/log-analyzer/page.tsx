@@ -255,10 +255,9 @@ export default function LogAnalyzer() {
               }`}
             >
               📊 AI 기반 로그 분석
-            </h2>
-            <p
+            </h2>            <p
               className={`text-xl ${
-                isDarkMode ? "text-gray-300" : "text-gray-600"
+                isDarkMode ? "text-gray-300" : "text-gray-700"
               }`}
             >
               로그 파일을 업로드하거나 직접 입력하여 패턴을 분석하고 이슈를
@@ -268,10 +267,13 @@ export default function LogAnalyzer() {
 
           <div className="grid lg:grid-cols-3 gap-8">
             {/* 로그 입력 영역 */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* 파일 업로드 */}
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6">
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">
+            <div className="lg:col-span-2 space-y-6">              {/* 파일 업로드 */}
+              <div className={`rounded-lg shadow-lg p-6 ${
+                isDarkMode ? "bg-slate-800" : "bg-white"
+              }`}>
+                <h3 className={`text-lg font-semibold mb-4 ${
+                  isDarkMode ? "text-slate-100" : "text-slate-900"
+                }`}>
                   로그 파일 업로드
                 </h3>
                 <div className="flex flex-wrap gap-4">
@@ -292,23 +294,30 @@ export default function LogAnalyzer() {
                     샘플 로그 사용
                   </button>
                 </div>
-              </div>
-
-              {/* 로그 내용 입력 */}
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6">
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">
+              </div>              {/* 로그 내용 입력 */}
+              <div className={`rounded-lg shadow-lg p-6 ${
+                isDarkMode ? "bg-slate-800" : "bg-white"
+              }`}>
+                <h3 className={`text-lg font-semibold mb-4 ${
+                  isDarkMode ? "text-slate-100" : "text-slate-900"
+                }`}>
                   로그 내용
-                </h3>
-                <textarea
+                </h3>                <textarea
                   value={logContent}
                   onChange={(e) => setLogContent(e.target.value)}
                   placeholder="로그 내용을 입력하거나 파일을 업로드하세요..."
-                  className="w-full h-64 p-4 font-mono text-sm bg-slate-50 dark:bg-slate-900 rounded border resize-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-900 dark:text-slate-100"
+                  className={`w-full h-64 p-4 font-mono text-sm rounded border resize-none focus:ring-2 focus:ring-orange-500 focus:border-transparent ${
+                    isDarkMode 
+                      ? "bg-slate-900 text-white border-slate-700 placeholder-slate-400" 
+                      : "bg-slate-50 text-slate-900 border-slate-300 placeholder-slate-500"
+                  }`}
                 />
                 <div className="flex justify-between items-center mt-4">
-                  <span className="text-sm text-slate-500">
+                  <span className={`text-sm ${
+                    isDarkMode ? "text-slate-400" : "text-slate-600"
+                  }`}>
                     {
-                      logContent.split("\\n").filter((line) => line.trim())
+                      logContent.split("\n").filter((line) => line.trim())
                         .length
                     }{" "}
                     라인
@@ -331,18 +340,22 @@ export default function LogAnalyzer() {
                     )}
                   </button>
                 </div>
-              </div>
-
-              {/* 분석 결과 */}
+              </div>              {/* 분석 결과 */}
               {analysis && (
-                <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6">
-                  <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-6">
+                <div className={`rounded-lg shadow-lg p-6 ${
+                  isDarkMode ? "bg-slate-800" : "bg-white"
+                }`}>
+                  <h3 className={`text-lg font-semibold mb-6 ${
+                    isDarkMode ? "text-slate-100" : "text-slate-900"
+                  }`}>
                     분석 결과
                   </h3>
 
                   {/* 요약 통계 */}
                   <div className="mb-6">
-                    <h4 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
+                    <h4 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
+                      isDarkMode ? "text-slate-100" : "text-slate-900"
+                    }`}>
                       <Icons.TrendingUp />
                       로그 요약
                     </h4>
@@ -447,35 +460,46 @@ export default function LogAnalyzer() {
             </div>
 
             {/* 사이드바 */}
-            <div className="space-y-6">
-              {/* 패턴 분석 */}
+            <div className="space-y-6">              {/* 패턴 분석 */}
               {analysis && (
-                <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6">
-                  <h4 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">
+                <div className={`rounded-lg shadow-lg p-6 ${
+                  isDarkMode ? "bg-slate-800" : "bg-white"
+                }`}>
+                  <h4 className={`text-lg font-semibold mb-4 ${
+                    isDarkMode ? "text-slate-100" : "text-slate-900"
+                  }`}>
                     패턴 분석
                   </h4>
                   <div className="space-y-3">
                     {analysis.patterns.map((pattern, index: number) => (
                       <div
                         key={index}
-                        className="p-3 bg-slate-50 dark:bg-slate-700 rounded-lg"
+                        className={`p-3 rounded-lg ${
+                          isDarkMode ? "bg-slate-700" : "bg-slate-50"
+                        }`}
                       >
-                        <div className="font-medium text-slate-900 dark:text-slate-100">
+                        <div className={`font-medium ${
+                          isDarkMode ? "text-slate-100" : "text-slate-900"
+                        }`}>
                           {pattern.description} ({pattern.frequency}회)
                         </div>
-                        <div className="text-sm text-slate-500 font-mono">
+                        <div className={`text-sm font-mono ${
+                          isDarkMode ? "text-slate-400" : "text-slate-600"
+                        }`}>
                           {pattern.pattern}
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
-              )}
-
-              {/* 권장사항 */}
+              )}              {/* 권장사항 */}
               {analysis && (
-                <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6">
-                  <h4 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">
+                <div className={`rounded-lg shadow-lg p-6 ${
+                  isDarkMode ? "bg-slate-800" : "bg-white"
+                }`}>
+                  <h4 className={`text-lg font-semibold mb-4 ${
+                    isDarkMode ? "text-slate-100" : "text-slate-900"
+                  }`}>
                     시스템 개선 권장사항
                   </h4>
                   <ul className="space-y-2">
@@ -483,7 +507,9 @@ export default function LogAnalyzer() {
                       (recommendation: string, index: number) => (
                         <li
                           key={index}
-                          className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-400"
+                          className={`flex items-start gap-2 text-sm ${
+                            isDarkMode ? "text-slate-400" : "text-slate-700"
+                          }`}
                         >
                           <Icons.CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
                           <span>{recommendation}</span>

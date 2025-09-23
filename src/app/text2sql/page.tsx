@@ -209,37 +209,47 @@ ORDER BY u.created_at DESC;`;
 
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-7xl mx-auto">
-          <div className="mb-8">
-            <h2 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-2">
+          <div className="mb-8">            <h2 className={`text-3xl font-bold mb-2 ${
+              isDarkMode ? "text-slate-100" : "text-slate-900"
+            }`}>
               자연어로 SQL 쿼리 생성
             </h2>
-            <p className="text-slate-600 dark:text-slate-400">
+            <p className={`${
+              isDarkMode ? "text-slate-400" : "text-slate-700"
+            }`}>
               평소 말하듯이 질문하면 AI가 적절한 SQL 쿼리를 생성해드립니다.
             </p>
           </div>
 
           <div className="grid lg:grid-cols-4 gap-8">
             {/* 메인 입력 영역 */}
-            <div className="lg:col-span-3 space-y-6">
-              {/* 스키마 입력 */}
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6">
-                {" "}
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
+            <div className="lg:col-span-3 space-y-6">              {/* 스키마 입력 */}
+              <div className={`rounded-lg shadow-lg p-6 ${
+                isDarkMode ? "bg-slate-800" : "bg-white"
+              }`}>
+                <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
+                  isDarkMode ? "text-slate-100" : "text-slate-900"
+                }`}>
                   <Icons.Database className="h-5 w-5" />
                   데이터베이스 스키마
                 </h3>
                 <textarea
                   value={tableSchema}
                   onChange={(e) => setTableSchema(e.target.value)}
-                  className="w-full h-48 p-4 font-mono text-sm bg-slate-50 dark:bg-slate-900 rounded border resize-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className={`w-full h-48 p-4 font-mono text-sm rounded border resize-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
+                    isDarkMode 
+                      ? "bg-slate-900 text-white border-slate-700 placeholder-slate-400" 
+                      : "bg-slate-50 text-slate-900 border-slate-300 placeholder-slate-500"
+                  }`}
                   placeholder="테이블 스키마를 입력하세요..."
                 />
-              </div>
-
-              {/* 질문 입력 */}
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6">
-                {" "}
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
+              </div>              {/* 질문 입력 */}
+              <div className={`rounded-lg shadow-lg p-6 ${
+                isDarkMode ? "bg-slate-800" : "bg-white"
+              }`}>
+                <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
+                  isDarkMode ? "text-slate-100" : "text-slate-900"
+                }`}>
                   <Icons.MessageSquare className="h-5 w-5" />
                   질문하기
                 </h3>
@@ -248,7 +258,11 @@ ORDER BY u.created_at DESC;`;
                     value={question}
                     onChange={(e) => setQuestion(e.target.value)}
                     placeholder="예: 지난 달에 가장 많이 주문한 고객은 누구인가요?"
-                    className="w-full h-24 p-4 bg-slate-50 dark:bg-slate-900 rounded border resize-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-slate-900 dark:text-slate-100"
+                    className={`w-full h-24 p-4 rounded border resize-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
+                      isDarkMode 
+                        ? "bg-slate-900 text-white border-slate-700 placeholder-slate-400" 
+                        : "bg-slate-50 text-slate-900 border-slate-300 placeholder-slate-500"
+                    }`}
                   />
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-slate-500">
@@ -273,12 +287,14 @@ ORDER BY u.created_at DESC;`;
                     </button>
                   </div>
                 </div>
-              </div>
-
-              {/* 생성된 SQL */}
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6">
+              </div>              {/* 생성된 SQL */}
+              <div className={`rounded-lg shadow-lg p-6 ${
+                isDarkMode ? "bg-slate-800" : "bg-white"
+              }`}>
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                  <h3 className={`text-lg font-semibold ${
+                    isDarkMode ? "text-slate-100" : "text-slate-900"
+                  }`}>
                     생성된 SQL 쿼리
                   </h3>
                   {generatedSQL && (
@@ -293,22 +309,27 @@ ORDER BY u.created_at DESC;`;
                       복사
                     </button>
                   )}
-                </div>
-                <textarea
+                </div>                <textarea
                   value={generatedSQL}
                   readOnly
                   placeholder="생성된 SQL 쿼리가 여기에 표시됩니다..."
-                  className="w-full h-64 p-4 font-mono text-sm bg-slate-50 dark:bg-slate-900 rounded border resize-none"
+                  className={`w-full h-64 p-4 font-mono text-sm rounded border resize-none ${
+                    isDarkMode 
+                      ? "bg-slate-900 text-white border-slate-700 placeholder-slate-400" 
+                      : "bg-slate-50 text-slate-900 border-slate-300 placeholder-slate-500"
+                  }`}
                 />
               </div>
             </div>
 
             {/* 사이드바 */}
-            <div className="space-y-6">
-              {/* 제안 질문 */}
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6">
-                {" "}
-                <h4 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
+            <div className="space-y-6">              {/* 제안 질문 */}
+              <div className={`rounded-lg shadow-lg p-6 ${
+                isDarkMode ? "bg-slate-800" : "bg-white"
+              }`}>
+                <h4 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
+                  isDarkMode ? "text-slate-100" : "text-slate-900"
+                }`}>
                   <Icons.Lightbulb className="h-5 w-5 text-yellow-500" />
                   제안 질문
                 </h4>
@@ -317,18 +338,23 @@ ORDER BY u.created_at DESC;`;
                     <button
                       key={index}
                       onClick={() => handleSuggestionClick(suggestion)}
-                      className="w-full text-left p-3 text-sm bg-slate-50 dark:bg-slate-700 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors text-slate-700 dark:text-slate-300"
+                      className={`w-full text-left p-3 text-sm rounded-lg transition-colors ${
+                        isDarkMode 
+                          ? "bg-slate-700 hover:bg-purple-900/20 text-slate-300"
+                          : "bg-slate-50 hover:bg-purple-50 text-slate-700"
+                      }`}
                     >
                       {suggestion}
                     </button>
                   ))}
                 </div>
-              </div>
-
-              {/* 최근 질문 */}
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6">
-                {" "}
-                <h4 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
+              </div>              {/* 최근 질문 */}
+              <div className={`rounded-lg shadow-lg p-6 ${
+                isDarkMode ? "bg-slate-800" : "bg-white"
+              }`}>
+                <h4 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
+                  isDarkMode ? "text-slate-100" : "text-slate-900"
+                }`}>
                   <Icons.History className="h-5 w-5 text-blue-500" />
                   최근 질문
                 </h4>
@@ -337,26 +363,38 @@ ORDER BY u.created_at DESC;`;
                     <button
                       key={index}
                       onClick={() => handleHistoryClick(item)}
-                      className="w-full text-left p-3 bg-slate-50 dark:bg-slate-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                      className={`w-full text-left p-3 rounded-lg transition-colors ${
+                        isDarkMode 
+                          ? "bg-slate-700 hover:bg-blue-900/20"
+                          : "bg-slate-50 hover:bg-blue-50"
+                      }`}
                     >
-                      <div className="text-sm font-medium text-slate-900 dark:text-slate-100 mb-1 truncate">
+                      <div className={`text-sm font-medium mb-1 truncate ${
+                        isDarkMode ? "text-slate-100" : "text-slate-900"
+                      }`}>
                         {item.question}
                       </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400 font-mono truncate">
+                      <div className={`text-xs font-mono truncate ${
+                        isDarkMode ? "text-slate-400" : "text-slate-500"
+                      }`}>
                         {item.sql.split("\n")[1] || item.sql.substring(0, 50)}
                         ...
                       </div>
                     </button>
                   ))}
                 </div>
-              </div>
-
-              {/* 팁 */}
-              <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-6">
-                <h5 className="font-semibold text-purple-900 dark:text-purple-100 mb-2">
+              </div>              {/* 팁 */}
+              <div className={`rounded-lg p-6 ${
+                isDarkMode ? "bg-purple-900/20" : "bg-purple-50"
+              }`}>
+                <h5 className={`font-semibold mb-2 ${
+                  isDarkMode ? "text-purple-100" : "text-purple-900"
+                }`}>
                   💡 사용 팁
                 </h5>
-                <ul className="text-sm text-purple-800 dark:text-purple-200 space-y-1">
+                <ul className={`text-sm space-y-1 ${
+                  isDarkMode ? "text-purple-200" : "text-purple-800"
+                }`}>
                   <li>• 구체적인 질문을 해주세요</li>
                   <li>• 테이블명과 컬럼명을 포함하면 더 정확합니다</li>
                   <li>• 기간이나 조건을 명시해주세요</li>
