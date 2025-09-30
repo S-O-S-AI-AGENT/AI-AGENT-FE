@@ -2,27 +2,63 @@
 
 ## 🔧 필수 GitHub Secrets 설정
 
-자동 테스트 결과를 이메일로 받기 위해 다음 3개의 GitHub Secrets를 설정해야 합니다.
+자동 테스트 결과를 이메일로 받기 위해 다음 방법 중 하나를 선택하세요.
 
-### 1. EMAIL_USERNAME
+## 🚦 전송 방법 선택 (EMAIL_PROVIDER)
+
+워크플로우는 여러 이메일 전송 방법을 지원합니다. `EMAIL_PROVIDER` Secret으로 선택하세요.
+
+- `gmail` (기본값)
+- `outlook`
+- `ses` (Amazon SES SMTP)
+- `mailgun` (Mailgun API)
+- `sendgrid` (SendGrid API)
+
+설정 위치: GitHub 저장소 → Settings → Secrets and variables → Actions → New repository secret
+
+```
+Name: EMAIL_PROVIDER
+Value: gmail | outlook | ses | mailgun | sendgrid
+```
+
+아무 것도 지정하지 않으면 기본값 `gmail`이 사용됩니다.
+
+---
+
+## 🔧 필수 GitHub Secrets 설정
+
+아래는 각 전달자(provider)별 필요한 Secrets 목록입니다. 본인 환경에 맞는 섹션만 설정하시면 됩니다.
+
+### A) Gmail (SMTP) — EMAIL_PROVIDER=gmail
+
+필수 3개:
+
+#### 1. EMAIL_USERNAME
 
 - **설명**: 이메일 발송에 사용할 Gmail 계정
 - **형식**: `your-email@gmail.com`
 - **예시**: `dev-team@company.com` 또는 `notifications@yourcompany.com`
 
-### 2. EMAIL_PASSWORD
+#### 2. EMAIL_PASSWORD
 
 - **설명**: Gmail App Password (계정 비밀번호가 아님!)
 - **형식**: 16자리 앱 전용 비밀번호
 - **예시**: `abcd efgh ijkl mnop` (공백 포함)
 
-### 3. EMAIL_RECIPIENTS
+#### 3. EMAIL_RECIPIENTS
 
 - **설명**: 테스트 결과를 받을 이메일 주소들
 - **형식**: 단일 또는 쉼표로 구분된 여러 이메일
 - **예시**:
   - 단일: `manager@company.com`
   - 다중: `dev@company.com,qa@company.com,manager@company.com`
+
+#### 장단점
+
+- 장점: 설정 간단, 바로 사용 가능
+- 단점: Gmail 정책/제한 영향, 조직용 대량 발송엔 부적합
+
+---
 
 ## 🔑 Gmail App Password 생성 방법
 
@@ -65,11 +101,81 @@
 - [ ] 2단계 인증 활성화
 - [ ] App Password 생성 완료
 
-### ✅ GitHub Secrets 설정
+### ✅ GitHub Secrets 설정 (Gmail 예시)
 
 - [ ] `EMAIL_USERNAME` 설정 (Gmail 주소)
 - [ ] `EMAIL_PASSWORD` 설정 (App Password)
 - [ ] `EMAIL_RECIPIENTS` 설정 (수신자 목록)
+
+---
+
+### B) Outlook/Office365 (SMTP) — EMAIL_PROVIDER=outlook
+
+필수:
+
+- `EMAIL_USERNAME` (예: your.name@company.com)
+- `EMAIL_PASSWORD` (일반적으로 앱 비밀번호 또는 조직 정책에 따른 토큰)
+- `EMAIL_RECIPIENTS`
+
+서버는 워크플로우에 내장되어 있으며 smtp.office365.com:587 를 사용합니다.
+
+#### 장단점
+
+- 장점: 회사 메일과 동일 도메인 사용, 거버넌스 용이
+- 단점: 조직 정책/2FA 설정 필요, 발송 제한
+
+---
+
+### C) Amazon SES (SMTP) — EMAIL_PROVIDER=ses
+
+필수:
+
+- `SES_SMTP_SERVER` (예: email-smtp.ap-northeast-2.amazonaws.com)
+- `SES_SMTP_USERNAME`
+- `SES_SMTP_PASSWORD`
+- `SES_FROM_ADDRESS` (검증된 발신자 이메일)
+- `EMAIL_RECIPIENTS`
+
+#### 장단점
+
+- 장점: 대량/대규모 발송에 적합, 비용 효율적, 높은 도달률
+- 단점: 도메인/이메일 검증 필요, 초기 세팅 약간 복잡
+
+---
+
+### D) Mailgun (API) — EMAIL_PROVIDER=mailgun
+
+필수:
+
+- `MAILGUN_DOMAIN` (예: mg.yourdomain.com)
+- `MAILGUN_API_KEY`
+- `EMAIL_RECIPIENTS`
+
+API 방식으로 전송되며 첨부파일 예시는 최소화되어 있습니다. (필요시 확장 가능)
+
+#### 장단점
+
+- 장점: 설정 간단, 도달률 우수
+- 단점: 유료 요금제 필요 가능, 첨부 구현 시 추가 작업 필요
+
+---
+
+### E) SendGrid (API) — EMAIL_PROVIDER=sendgrid
+
+필수:
+
+- `SENDGRID_API_KEY`
+- `SENDGRID_FROM_EMAIL`
+- `EMAIL_RECIPIENTS`
+
+JSON API로 전송되며 현재 샘플은 단일 수신자 전송 예시입니다. 다중 수신자는 personalizations를 확장하세요.
+
+#### 장단점
+
+- 장점: 개발자 친화적 API, 높은 도달률
+- 단점: 유료 요금제 필요 가능, API 학습 필요
+
+---
 
 ## 📨 발송되는 이메일 내용
 
