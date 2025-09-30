@@ -1,10 +1,10 @@
-name: Automated Testing with TestFlight
+name: Automated Web Testing & Reporting
 
 on:
   push:
-    branches: [main, develop]
+    branches: ["**"] # 모든 브랜치에서 실행
   pull_request:
-    branches: [main]
+    branches: ["**"] # 모든 브랜치로의 PR에서 실행
   schedule:
     # 매일 오전 9시 KST (UTC 0시)에 실행
     - cron: "0 0 * * *"
@@ -63,75 +63,9 @@ jobs:
           path: test-results/
           retention-days: 30
 
-  ios-testflight-build:
-    runs-on: macos-latest
-    needs: web-e2e-tests
-    if: github.ref == 'refs/heads/main'
-    timeout-minutes: 60
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "18"
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Setup iOS certificates and provisioning profiles
-        env:
-          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
-          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
-          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-        run: |
-          # create variables
-          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
-          PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-
-          # import certificate and provisioning profile from secrets
-          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode --output $CERTIFICATE_PATH
-          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode --output $PP_PATH
-
-          # create temporary keychain
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-
-          # import certificate to keychain
-          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
-          security list-keychain -d user -s $KEYCHAIN_PATH
-
-          # apply provisioning profile
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
-
-      - name: Build iOS app (React Native/Capacitor)
-        run: |
-          # React Native 또는 Capacitor를 사용한 iOS 빌드
-          # 실제 프로젝트에 맞게 수정 필요
-          echo "Building iOS app..."
-          # npx cap build ios --configuration Release
-
-      - name: Upload to TestFlight
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          # xcrun altool을 사용하여 TestFlight에 업로드
-          # 실제 IPA 파일 경로로 수정 필요
-          echo "Uploading to TestFlight..."
-          # xcrun altool --upload-app --type ios --file "path/to/app.ipa" --username "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID"
-
   create-test-report:
     runs-on: ubuntu-latest
-    needs: [web-e2e-tests, ios-testflight-build]
+    needs: [web-e2e-tests]
     if: always()
 
     steps:
@@ -183,8 +117,8 @@ jobs:
             - ✅ **통과:** ${{ steps.test-report.outputs.TESTS_PASSED }}개
             - ❌ **실패:** ${{ steps.test-report.outputs.TESTS_FAILED }}개
 
-            ## 🎯 TestFlight 배포
-            ${context.payload.ref === 'refs/heads/main' ? '✅ TestFlight에 새 빌드가 업로드되었습니다.' : '⏭️ main 브랜치가 아니므로 TestFlight 배포를 건너뛰었습니다.'}
+            ## � 웹 애플리케이션 테스트
+            ✅ 웹 애플리케이션의 모든 주요 기능에 대한 E2E 테스트가 완료되었습니다.
 
             ## 📹 테스트 영상
             테스트 실행 중 기록된 영상들은 [Artifacts](${{ steps.test-report.outputs.WORKFLOW_URL }})에서 다운로드할 수 있습니다.
@@ -239,8 +173,8 @@ jobs:
               <li>❌ <strong>실패:</strong> ${{ steps.test-report.outputs.TESTS_FAILED }}개</li>
             </ul>
 
-            <h3>🎯 TestFlight 배포</h3>
-            <p>${{ github.ref == 'refs/heads/main' && 'TestFlight에 새 빌드가 업로드되었습니다.' || 'main 브랜치가 아니므로 TestFlight 배포를 건너뛰었습니다.' }}</p>
+            <h3>� 웹 애플리케이션 테스트</h3>
+            <p>웹 애플리케이션의 모든 주요 기능에 대한 E2E 테스트가 완료되었습니다.</p>
 
             <h3>🔗 관련 링크</h3>
             <ul>
