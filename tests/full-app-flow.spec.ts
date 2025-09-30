@@ -56,7 +56,9 @@ test.describe("AI Project Agent - 전체 애플리케이션 플로우", () => {
 
   test("사용자 여정: Log 분석기 플로우", async ({ page }) => {
     // Log 분석기 페이지로 이동
-    await page.getByRole("link", { name: /Log 분석기/i }).click();
+    const logAnalyzerLink = page.locator('a[href="/log-analyzer"]').first();
+    await expect(logAnalyzerLink).toBeVisible({ timeout: 10000 });
+    await logAnalyzerLink.click();
     await page.waitForLoadState("networkidle");
 
     await expect(page).toHaveURL("/log-analyzer");
@@ -93,28 +95,32 @@ test.describe("AI Project Agent - 전체 애플리케이션 플로우", () => {
         await page.waitForLoadState("networkidle");
       }
 
-      // 해당 페이지로 이동
-      const link = page
-        .getByRole("link", { name: new RegExp(currentPage.name, "i") })
-        .first();
-      if (await link.isVisible()) {
+      // 해당 페이지로 이동 (href 우선 사용: 텍스트 변경에 강건)
+      const hrefLink = page.locator(`a[href="${currentPage.url}"]`).first();
+      if ((await hrefLink.count()) > 0) {
+        await hrefLink.click();
+      } else {
+        const link = page
+          .getByRole("link", { name: new RegExp(currentPage.name, "i") })
+          .first();
+        if (!(await link.isVisible())) continue;
         await link.click();
-        await page.waitForLoadState("networkidle");
-
-        // URL 검증
-        await expect(page).toHaveURL(currentPage.url);
-
-        // 페이지별 특정 요소 확인
-        await page.waitForTimeout(1000);
-
-        // 전체 페이지 스크린샷
-        await page.screenshot({
-          path: `journey-${currentPage.name
-            .toLowerCase()
-            .replace(/\s+/g, "-")}.png`,
-          fullPage: true,
-        });
       }
+      await page.waitForLoadState("networkidle");
+
+      // URL 검증
+      await expect(page).toHaveURL(currentPage.url);
+
+      // 페이지별 특정 요소 확인
+      await page.waitForTimeout(1000);
+
+      // 전체 페이지 스크린샷
+      await page.screenshot({
+        path: `journey-${currentPage.name
+          .toLowerCase()
+          .replace(/\s+/g, "-")}.png`,
+        fullPage: true,
+      });
     }
   });
 
@@ -177,6 +183,8 @@ test.describe("AI Project Agent - 전체 애플리케이션 플로우", () => {
 
     // 홈으로 돌아가기
     await page.goto("/");
-    await expect(page.getByText("개발과 운영을 간단하게")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /AI Project Agent|개발의 미래는/i }),
+    ).toBeVisible();
   });
 });
