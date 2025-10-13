@@ -2,7 +2,7 @@ name: Enhanced Test Reporting & Notifications
 
 on:
   workflow_run:
-    workflows: ["Automated Testing with TestFlight"]
+    workflows: ["Automated Web Testing & Reporting"]
     types:
       - completed
 
@@ -44,9 +44,7 @@ jobs:
             unzip -q playwright-report.zip -d ./test-results/
           fi
 
-          if [ -f "test-videos.zip" ]; then
-            unzip -q test-videos.zip -d ./test-videos/
-          fi
+          # (구) test-videos 아티팩트는 더 이상 사용하지 않음
 
           # 테스트 결과 파싱
           echo "Processing test results..."
@@ -105,23 +103,13 @@ jobs:
           # 배지 색상 결정
           if [ "$FAILED_TESTS" -eq 0 ]; then
             echo "BADGE_COLOR=brightgreen" >> $GITHUB_OUTPUT
-            echo "TESTFLIGHT_COLOR=blue" >> $GITHUB_OUTPUT
           elif [ "$PASSED_TESTS" -gt "$FAILED_TESTS" ]; then
             echo "BADGE_COLOR=yellow" >> $GITHUB_OUTPUT
-            echo "TESTFLIGHT_COLOR=orange" >> $GITHUB_OUTPUT
           else
             echo "BADGE_COLOR=red" >> $GITHUB_OUTPUT
-            echo "TESTFLIGHT_COLOR=red" >> $GITHUB_OUTPUT
           fi
 
-          # TestFlight 상태
-          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
-            echo "IS_MAIN_BRANCH=true" >> $GITHUB_OUTPUT
-            echo "TESTFLIGHT_STATUS=deployed" >> $GITHUB_OUTPUT
-          else
-            echo "IS_MAIN_BRANCH=false" >> $GITHUB_OUTPUT
-            echo "TESTFLIGHT_STATUS=skipped" >> $GITHUB_OUTPUT
-          fi
+          # 웹 전용 파이프라인으로 TestFlight 상태 제거
 
           # 실패한 테스트 상세 정보
           if [ -f "failed_tests.txt" ]; then
@@ -166,7 +154,7 @@ jobs:
             }
 
             // 템플릿 변수 치환
-            const processedTemplate = issueTemplate
+            let processedTemplate = issueTemplate
               .replace(/\{\{REPORT_DATE\}\}/g, '${{ steps.report.outputs.REPORT_DATE }}')
               .replace(/\{\{COMMIT_SHA\}\}/g, '${{ steps.report.outputs.COMMIT_SHA }}')
               .replace(/\{\{FULL_COMMIT_SHA\}\}/g, '${{ steps.report.outputs.FULL_COMMIT_SHA }}')
@@ -176,9 +164,13 @@ jobs:
               .replace(/\{\{TESTS_PASSED\}\}/g, process.env.PASSED_TESTS)
               .replace(/\{\{TESTS_FAILED\}\}/g, process.env.FAILED_TESTS)
               .replace(/\{\{SUCCESS_RATE\}\}/g, process.env.SUCCESS_RATE)
-              .replace(/\{\{BADGE_COLOR\}\}/g, '${{ steps.report.outputs.BADGE_COLOR }}')
-              .replace(/\{\{TESTFLIGHT_STATUS\}\}/g, '${{ steps.report.outputs.TESTFLIGHT_STATUS }}')
-              .replace(/\{\{TESTFLIGHT_COLOR\}\}/g, '${{ steps.report.outputs.TESTFLIGHT_COLOR }}');
+              .replace(/\{\{BADGE_COLOR\}\}/g, '${{ steps.report.outputs.BADGE_COLOR }}');
+
+            // 템플릿에서 TestFlight 관련 블록/링크 제거
+            processedTemplate = processedTemplate
+              .replace(/\!\[Deployment\]\([^\)]*\)\n?/g, '')
+              .replace(/## \ud83c\udfaf TestFlight [\s\S]*?(?=(\n##|$))/g, '')
+              .replace(/\| \[\ud83d\udcf1 TestFlight\][^\n]*\n/g, '');
 
             const issueTitle = `🤖 자동 테스트 결과 - ${new Date().toLocaleDateString('ko-KR')} (${process.env.SUCCESS_RATE}% 성공)`;
 
@@ -275,8 +267,7 @@ jobs:
                   </div>
                 </div>
                 
-                <h2>🎯 TestFlight 배포</h2>
-                <p>${{ steps.report.outputs.IS_MAIN_BRANCH == 'true' && 'TestFlight에 새 빌드가 업로드되었습니다.' || 'main 브랜치가 아니므로 TestFlight 배포를 건너뛰었습니다.' }}</p>
+                <!-- 웹 전용: TestFlight 섹션 제거 -->
                 
                 <div style="margin: 30px 0;">
                   <a href="${{ steps.report.outputs.WORKFLOW_URL }}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 15px 20px; border-radius: 8px; font-weight: 600;">📊 워크플로우 결과 보기</a>
@@ -291,5 +282,4 @@ jobs:
             </body>
             </html>
           attachments: |
-            test-videos/*
             test-results/*.png

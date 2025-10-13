@@ -15,11 +15,7 @@
     "test:debug": "playwright test --debug",
     "test:report": "playwright show-report",
     "test:record": "playwright test --reporter=html --output=test-results",
-    "test:ci": "playwright test --reporter=html,json --output=test-results",
-    "ios:setup": "npm install @capacitor/core @capacitor/cli @capacitor/ios && npx cap init",
-    "ios:build": "npm run build && npx cap sync ios",
-    "ios:open": "npx cap open ios",
-    "ios:run": "npx cap run ios"
+    "test:ci": "playwright test --reporter=html,json --output=test-results"
   },
   "dependencies": {
     "react": "19.1.0",

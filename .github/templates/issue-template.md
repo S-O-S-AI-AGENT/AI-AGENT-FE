@@ -3,7 +3,6 @@
 <div align="center">
 
 ![Test Status](https://img.shields.io/badge/Tests-{{TESTS_PASSED}}%20passed%20{{TESTS_FAILED}}%20failed-{{BADGE_COLOR}})
-![Deployment](https://img.shields.io/badge/TestFlight-{{TESTFLIGHT_STATUS}}-{{TESTFLIGHT_COLOR}})
 ![Date](https://img.shields.io/badge/Date-{{REPORT_DATE_ENCODED}}-blue)
 
 </div>
@@ -46,27 +45,6 @@
 {{PASSED_TESTS_SUMMARY}}
 {{/if}}
 
-## 🎯 TestFlight 배포 상태
-
-{{#if IS_MAIN_BRANCH}}
-✅ **배포 완료**
-
-- TestFlight에 새 빌드가 성공적으로 업로드되었습니다.
-- 베타 테스터들이 새 버전을 다운로드할 수 있습니다.
-- 빌드 번호: `{{BUILD_NUMBER}}`
-
-### 📱 테스트 방법
-
-1. TestFlight 앱을 열어주세요
-2. "AI Project Agent" 앱을 찾아주세요
-3. "설치" 또는 "업데이트" 버튼을 눌러주세요
-   {{else}}
-   ⏭️ **배포 건너뜀**
-
-- main 브랜치가 아니므로 TestFlight 배포를 건너뛰었습니다.
-- 배포를 원하시면 main 브랜치에 병합해주세요.
-  {{/if}}
-
 ## 📹 테스트 영상 및 스크린샷
 
 테스트 실행 중 촬영된 자료들:
@@ -92,7 +70,6 @@
 | ------------------------------------------------- | ------------------------------ |
 | [📊 워크플로우 결과]({{WORKFLOW_URL}})            | GitHub Actions 실행 상세 정보  |
 | [🎭 Playwright 리포트]({{PLAYWRIGHT_REPORT_URL}}) | 상세 테스트 리포트 및 트레이스 |
-| [📱 TestFlight](https://testflight.apple.com)     | iOS 앱 테스트 (베타 테스터용)  |
 | [🔗 저장소]({{GITHUB_REPO_URL}})                  | 소스 코드 저장소               |
 
 </div>
