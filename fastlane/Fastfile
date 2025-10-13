@@ -1,0 +1,38 @@
+# Fastlane template for Capacitor/React Native style iOS app
+# Requires the iOS project to exist at ios/App/
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Build and upload to TestFlight"
+  lane :beta do
+    UI.message("Preparing TestFlight upload...")
+
+    api_key = app_store_connect_api_key(
+      key_id: ENV["ASC_API_KEY_ID"],
+      issuer_id: ENV["ASC_API_ISSUER_ID"],
+      key_content: ENV["ASC_API_KEY_BASE64"],
+      is_key_content_base64: true,
+    )
+
+    scheme = ENV["IOS_SCHEME"] || "App"
+    workspace = ENV["IOS_WORKSPACE"] || "ios/App/App.xcworkspace"
+    configuration = ENV["IOS_CONFIGURATION"] || "Release"
+    export_method = ENV["IOS_EXPORT_METHOD"] || "app-store"
+
+    build_app(
+      scheme: scheme,
+      workspace: workspace,
+      configuration: configuration,
+      export_method: export_method,
+      include_bitcode: false,
+      include_symbols: true
+    )
+
+    upload_to_testflight(
+      api_key: api_key,
+      skip_waiting_for_build_processing: true,
+      changelog: ENV["RELEASE_NOTES"] || "Automated build by CI"
+    )
+  end
+end

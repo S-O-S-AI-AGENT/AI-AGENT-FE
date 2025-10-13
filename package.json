@@ -7,6 +7,8 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
+    "e2e:generate": "node ./scripts/generate-e2e.cjs",
+    "pretest": "npm run e2e:generate",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
