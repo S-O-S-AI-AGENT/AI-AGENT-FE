@@ -52,6 +52,130 @@ export default function E2ETester() {
   const [isRunning, setIsRunning] = useState(false);
   const [results, setResults] = useState<TestResult[]>([]);
   const [activeTab, setActiveTab] = useState<"tests" | "results">("tests");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // Helpers: file download
+  const downloadFile = (
+    filename: string,
+    content: string,
+    type = "text/plain",
+  ) => {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  // Export: Playwright spec from current tests
+  const exportPlaywrightSpec = () => {
+    const lines: string[] = [];
+    lines.push("import { test, expect } from '@playwright/test';\n");
+    lines.push("test.describe('E2E Tester Export', () => {");
+    tests.forEach((t) => {
+      const tName = (t.name || `Test ${t.id}`).replace(/[`]/g, "'");
+      lines.push(`  test('${tName}', async ({ page }) => {`);
+      // Navigate by url if provided
+      if (t.url) {
+        lines.push(`    await page.goto('${t.url}');`);
+        lines.push(`    await page.waitForLoadState('networkidle');`);
+      }
+      t.steps.forEach((s) => {
+        if (s.action === "navigate" && s.value) {
+          lines.push(`    await page.goto('${s.value}');`);
+          lines.push(`    await page.waitForLoadState('networkidle');`);
+        } else if (s.action === "click" && s.selector) {
+          lines.push(
+            `    await page.locator('${s.selector}').first().click();`,
+          );
+        } else if (s.action === "fill" && s.selector) {
+          const val = (s.value ?? "").replace(/[`]/g, "\\`");
+          lines.push(
+            `    await page.locator('${s.selector}').first().fill('${val}');`,
+          );
+        } else if (s.action === "expect" && s.selector) {
+          const val = s.value ?? "";
+          if (val) {
+            lines.push(
+              `    await expect(page.locator('${
+                s.selector
+              }')).toContainText('${val.replace(/[`]/g, "\\`")}');`,
+            );
+          } else {
+            lines.push(
+              `    await expect(page.locator('${s.selector}')).toBeVisible();`,
+            );
+          }
+        } else if (s.action === "wait") {
+          const ms = Number(s.value || 500);
+          lines.push(`    await page.waitForTimeout(${isNaN(ms) ? 500 : ms});`);
+        }
+      });
+      lines.push(`  });`);
+    });
+    lines.push("});\n");
+    downloadFile(
+      `exported-e2e-${Date.now()}.spec.ts`,
+      lines.join("\n"),
+      "text/plain",
+    );
+  };
+
+  // Export: e2e.config.json snippet built from current tests
+  const exportE2EConfigSnippet = () => {
+    const routeEntries = tests.map(
+      (t): { path: string; actions: Array<Record<string, unknown>> } => {
+        // Derive path from URL (if absolute) or use pathname directly
+        let pathValue = "/";
+        try {
+          if (t.url?.startsWith("http")) {
+            const u = new URL(t.url);
+            pathValue = u.pathname || "/";
+          } else if (t.url) {
+            pathValue = t.url;
+          }
+        } catch {
+          pathValue = t.url || "/";
+        }
+
+        const actions = t.steps
+          .map((s): Record<string, unknown> | null => {
+            if (s.action === "fill")
+              return { type: "fill", selector: s.selector, value: s.value };
+            if (s.action === "click")
+              return { type: "click", selector: s.selector };
+            if (s.action === "expect") {
+              // If value present, prefer expectVisible on provided selector
+              return s.value
+                ? { type: "expectVisible", selector: s.selector }
+                : { type: "waitForSelector", selector: s.selector };
+            }
+            if (s.action === "wait")
+              return { type: "waitForTimeout", ms: Number(s.value || 500) };
+            // navigate is handled by generator; keep as first goto in the spec, so omit in config
+            return null;
+          })
+          .filter((x): x is Record<string, unknown> => x !== null);
+
+        return { path: pathValue, actions };
+      },
+    );
+
+    const snippet: {
+      routes: Array<{ path: string; actions: Array<Record<string, unknown>> }>;
+    } = {
+      routes: routeEntries,
+    };
+    downloadFile(
+      `e2e-config-snippet-${Date.now()}.json`,
+      JSON.stringify(snippet, null, 2),
+      "application/json",
+    );
+  };
 
   // Dark mode persistence
   useEffect(() => {
@@ -79,8 +203,8 @@ export default function E2ETester() {
   const updateTest = (testId: number, field: string, value: string) => {
     setTests(
       tests.map((test) =>
-        test.id === testId ? { ...test, [field]: value } : test
-      )
+        test.id === testId ? { ...test, [field]: value } : test,
+      ),
     );
   };
 
@@ -97,7 +221,7 @@ export default function E2ETester() {
           };
         }
         return test;
-      })
+      }),
     );
   };
 
@@ -105,18 +229,18 @@ export default function E2ETester() {
     testId: number,
     stepIndex: number,
     field: string,
-    value: string
+    value: string,
   ) => {
     setTests(
       tests.map((test) => {
         if (test.id === testId) {
           const updatedSteps = test.steps.map((step, index) =>
-            index === stepIndex ? { ...step, [field]: value } : step
+            index === stepIndex ? { ...step, [field]: value } : step,
           );
           return { ...test, steps: updatedSteps };
         }
         return test;
-      })
+      }),
     );
   };
 
@@ -130,7 +254,7 @@ export default function E2ETester() {
           };
         }
         return test;
-      })
+      }),
     );
   };
 
@@ -149,8 +273,8 @@ export default function E2ETester() {
       // 테스트 실행 시뮬레이션
       setTests((prev) =>
         prev.map((t) =>
-          t.id === test.id ? { ...t, status: "running" as const } : t
-        )
+          t.id === test.id ? { ...t, status: "running" as const } : t,
+        ),
       );
 
       await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -164,8 +288,8 @@ export default function E2ETester() {
                 ...t,
                 status: success ? ("passed" as const) : ("failed" as const),
               }
-            : t
-        )
+            : t,
+        ),
       );
 
       mockResults.push({
@@ -182,6 +306,74 @@ export default function E2ETester() {
 
     setResults(mockResults);
     setIsRunning(false);
+  };
+
+  // Fetch route suggestions from analyzer API and merge into tests
+  const analyzeProject = async () => {
+    try {
+      setIsAnalyzing(true);
+      const res = await fetch("/api/e2e-analyzer", { cache: "no-store" });
+      if (!res.ok) throw new Error(`분석 실패 (${res.status})`);
+      const data = (await res.json()) as {
+        routes: Array<{
+          path: string;
+          actions: Array<{
+            type: string;
+            selector?: string;
+            value?: string;
+            ms?: number;
+          }>;
+        }>;
+      };
+      const imported: Test[] = (data.routes || []).map((r, idx) => ({
+        id: Date.now() + idx,
+        name: `${r.path} 자동 제안`,
+        url: r.path,
+        steps: [
+          { action: "navigate", selector: "", value: r.path },
+          ...r.actions.map((a) => {
+            if (a.type === "fill")
+              return {
+                action: "fill",
+                selector: a.selector,
+                value: a.value ?? "",
+              } as TestStep;
+            if (a.type === "click")
+              return {
+                action: "click",
+                selector: a.selector,
+                value: "",
+              } as TestStep;
+            if (a.type === "expectVisible")
+              return {
+                action: "expect",
+                selector: a.selector,
+                value: "",
+              } as TestStep;
+            if (a.type === "waitForSelector")
+              return {
+                action: "wait",
+                selector: a.selector,
+                value: "700",
+              } as TestStep;
+            if (a.type === "waitForTimeout")
+              return {
+                action: "wait",
+                selector: "",
+                value: String(a.ms ?? 500),
+              } as TestStep;
+            return { action: "wait", selector: "", value: "300" } as TestStep;
+          }),
+        ],
+        status: "idle",
+      }));
+      setTests((prev) => [...prev, ...imported]);
+      setActiveTab("tests");
+    } catch (e) {
+      alert((e as Error).message || "분석 중 오류가 발생했습니다");
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const actionIcons = {
@@ -298,6 +490,23 @@ export default function E2ETester() {
                 <Icons.Plus className="h-4 w-4" />새 테스트
               </button>
               <button
+                onClick={analyzeProject}
+                disabled={isAnalyzing}
+                className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 disabled:from-gray-400 disabled:to-gray-500 text-white px-6 py-2.5 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl hover:scale-105 disabled:cursor-not-allowed disabled:hover:scale-100"
+                title="프로젝트 코드를 분석해 테스트를 자동 제안합니다"
+              >
+                {isAnalyzing ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                    분석 중...
+                  </>
+                ) : (
+                  <>
+                    <Icons.Search className="h-4 w-4" /> 프로젝트 분석
+                  </>
+                )}
+              </button>
+              <button
                 onClick={runTests}
                 disabled={isRunning || tests.length === 0}
                 className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 disabled:from-gray-400 disabled:to-gray-500 text-white px-6 py-2.5 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl hover:scale-105 disabled:cursor-not-allowed disabled:hover:scale-100"
@@ -313,6 +522,22 @@ export default function E2ETester() {
                     모든 테스트 실행
                   </>
                 )}
+              </button>
+              <button
+                onClick={exportPlaywrightSpec}
+                disabled={tests.length === 0}
+                className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 disabled:from-gray-400 disabled:to-gray-500 text-white px-6 py-2.5 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl hover:scale-105 disabled:cursor-not-allowed disabled:hover:scale-100"
+                title="현재 테스트를 Playwright 코드로 내보냅니다"
+              >
+                <Icons.FileText className="h-4 w-4" /> 코드 내보내기
+              </button>
+              <button
+                onClick={exportE2EConfigSnippet}
+                disabled={tests.length === 0}
+                className="bg-gradient-to-r from-gray-600 to-gray-800 hover:from-gray-700 hover:to-gray-900 disabled:from-gray-400 disabled:to-gray-500 text-white px-6 py-2.5 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl hover:scale-105 disabled:cursor-not-allowed disabled:hover:scale-100"
+                title="자동 생성기에 사용할 e2e.config.json 조각을 다운로드합니다"
+              >
+                <Icons.Download className="h-4 w-4" /> 설정 내보내기
               </button>
             </div>
           </div>
@@ -476,7 +701,7 @@ export default function E2ETester() {
                                 test.id,
                                 stepIndex,
                                 "action",
-                                e.target.value
+                                e.target.value,
                               )
                             }
                             className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors duration-200 ${
@@ -501,7 +726,7 @@ export default function E2ETester() {
                                   test.id,
                                   stepIndex,
                                   "selector",
-                                  e.target.value
+                                  e.target.value,
                                 )
                               }
                               placeholder="CSS 셀렉터"
@@ -521,7 +746,7 @@ export default function E2ETester() {
                                 test.id,
                                 stepIndex,
                                 "value",
-                                e.target.value
+                                e.target.value,
                               )
                             }
                             placeholder={

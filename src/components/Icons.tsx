@@ -61,6 +61,9 @@ export const Icons = {
   Upload: ({ className }: IconProps = {}) => (
     <span className={className}>📤</span>
   ),
+  Download: ({ className }: IconProps = {}) => (
+    <span className={className}>📥</span>
+  ),
   Search: ({ className }: IconProps = {}) => (
     <span className={className}>🔍</span>
   ),

@@ -5,29 +5,14 @@
 이 시스템은 다음과 같은 자동화 플로우를 제공합니다:
 
 1. **자동 E2E 테스트**: Playwright를 사용한 웹 애플리케이션 테스트
-2. **TestFlight 배포**: iOS 앱 자동 빌드 및 TestFlight 업로드
-3. **테스트 결과 공유**: GitHub 이슈 및 이메일로 자동 리포트 생성
-4. **비디오 녹화**: 테스트 실행 과정 자동 기록
+2. **테스트 결과 공유**: GitHub 이슈 및 이메일로 자동 리포트 생성
+3. **비디오 녹화**: 테스트 실행 과정 자동 기록
 
 ## 🚀 시작하기
 
 ### 1. 필수 준비사항
 
-#### GitHub Secrets 설정
-
-[GITHUB_SECRETS_SETUP.md](./GITHUB_SECRETS_SETUP.md) 파일을 참고하여 다음 secrets를 설정하세요:
-
-**iOS/TestFlight 관련:**
-
-- `APPLE_ID`
-- `APPLE_APP_SPECIFIC_PASSWORD`
-- `APPLE_TEAM_ID`
-- `BUILD_CERTIFICATE_BASE64`
-- `P12_PASSWORD`
-- `BUILD_PROVISION_PROFILE_BASE64`
-- `KEYCHAIN_PASSWORD`
-
-**이메일 알림 관련:**
+#### GitHub Secrets 설정 (이메일 알림)
 
 - `EMAIL_USERNAME`
 - `EMAIL_PASSWORD`
@@ -37,9 +22,7 @@
 
 - `SLACK_WEBHOOK_URL`
 
-#### iOS 앱 설정 (선택사항)
-
-[IOS_SETUP_GUIDE.md](./IOS_SETUP_GUIDE.md) 파일을 참고하여 Capacitor를 설정하세요.
+> iOS/TestFlight는 지원하지 않습니다. 본 프로젝트는 웹 전용 자동화 파이프라인입니다.
 
 ### 2. 워크플로우 활성화
 
@@ -115,22 +98,7 @@ test.describe("새로운 기능 테스트", () => {
 });
 ```
 
-## 📱 TestFlight 배포
-
-### 자동 배포 조건
-
-- `main` 브랜치에 코드 푸시
-- 모든 E2E 테스트 통과
-
-### 수동 배포
-
-GitHub Actions에서 워크플로우를 수동으로 실행할 수 있습니다.
-
-### 베타 테스터 추가
-
-1. App Store Connect에서 TestFlight 섹션으로 이동
-2. 내부 테스팅 또는 외부 테스팅 그룹에 사용자 추가
-3. 테스터들에게 TestFlight 앱 설치 및 초대 이메일 확인 요청
+<!-- TestFlight 관련 섹션 제거: 웹 전용 -->
 
 ## 🔧 고급 설정
 
@@ -160,11 +128,7 @@ schedule:
 2. Playwright 리포트에서 상세 정보 확인
 3. 실패한 테스트의 비디오 및 스크린샷 분석
 
-### TestFlight 업로드 실패 시
-
-1. Apple Developer 계정 상태 확인
-2. 인증서 만료일 확인
-3. 프로비저닝 프로필 유효성 검증
+<!-- TestFlight 문제 해결 섹션 제거: 웹 전용 -->
 
 ### 이메일 발송 실패 시
 
@@ -176,8 +140,7 @@ schedule:
 
 - [Playwright 공식 문서](https://playwright.dev/)
 - [GitHub Actions 문서](https://docs.github.com/en/actions)
-- [TestFlight 가이드](https://developer.apple.com/testflight/)
-- [Capacitor 문서](https://capacitorjs.com/docs)
+<!-- TestFlight/Capacitor 링크 제거: 웹 전용 -->
 
 ## 🤝 기여하기
 

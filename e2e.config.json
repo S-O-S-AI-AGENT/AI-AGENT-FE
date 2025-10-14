@@ -1,0 +1,43 @@
+{
+  "exclude": ["/api/*"],
+  "routes": [
+    {
+      "path": "/sql-tuner",
+      "actions": [
+        {
+          "type": "fill",
+          "selector": "textarea",
+          "value": "SELECT * FROM users LIMIT 10;"
+        },
+        { "type": "click", "selector": "button:has-text(\"최적화\")" },
+        { "type": "waitForTimeout", "ms": 300 },
+        { "type": "expectVisible", "selector": "text=AI 기반 SQL 쿼리 최적화" }
+      ]
+    },
+    {
+      "path": "/text2sql",
+      "actions": [
+        {
+          "type": "fill",
+          "selector": "textarea",
+          "value": "25세 이상 사용자 보여줘"
+        },
+        { "type": "click", "selector": "button:has-text(\"생성\")" },
+        { "type": "waitForSelector", "selector": "text=Text2SQL" }
+      ]
+    },
+    {
+      "path": "/e2e-tester",
+      "actions": [
+        { "type": "waitForSelector", "selector": "text=E2E 자동 테스터" },
+        {
+          "type": "click",
+          "selector": "button:has-text(\"모든 테스트 실행\")"
+        },
+        { "type": "waitForSelector", "selector": "text=실행 중..." },
+        { "type": "waitForTimeout", "ms": 1000 },
+        { "type": "click", "selector": "button:has-text(\"실행 결과\")" }
+      ]
+    }
+  ]
+}
