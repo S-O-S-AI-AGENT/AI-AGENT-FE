@@ -44,7 +44,7 @@ jobs:
       - name: Run E2E tests with video recording
         run: |
           # Generate HTML report and a deterministic JSON summary file alongside test artifacts
-          npx playwright test --reporter=html,json=./test-results/report.json --output=test-results
+          npx playwright test --reporter=html --output=test-results
         env:
           CI: true
 

@@ -50,7 +50,7 @@ jobs:
         env:
           CI: true
         run: |
-          npx playwright test --reporter=html,json=./test-results/report.json --output=test-results
+          npx playwright test --reporter=html --output=test-results
 
       - name: Upload E2E artifacts
         if: ${{ inputs.runE2E == 'true' && success() }}
