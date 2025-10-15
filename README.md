@@ -167,10 +167,10 @@ NEXT_TELEMETRY_DISABLED=1    # Next.js 텔레메트리 비활성화
 
 프로젝트의 전체 코드 분석이 완료되었습니다:
 
-- **[ANALYSIS_SUMMARY.md](./ANALYSIS_SUMMARY.md)** - 📋 분석 요약 및 개요
+- **[ANALYSIS_SUMMARY.md](./ANALYSIS_SUMMARY.md)** - 📋 분석 요약 및 개요 (320 라인)
 - **[CODE_ANALYSIS.md](./CODE_ANALYSIS.md)** - 🔍 전체 코드 상세 분석 (1,145 라인)
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - 🏗️ 시스템 아키텍처 문서 (650+ 라인)
-- **[RECOMMENDATIONS.md](./RECOMMENDATIONS.md)** - 💡 개선 권장사항 (900+ 라인)
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - 🏗️ 시스템 아키텍처 문서 (769 라인)
+- **[RECOMMENDATIONS.md](./RECOMMENDATIONS.md)** - 💡 개선 권장사항 (884 라인)
 
 **종합 평가:** ⭐⭐⭐⭐ (4/5) - 탄탄한 기반, AI API 연동 및 테스트 강화 필요
 
