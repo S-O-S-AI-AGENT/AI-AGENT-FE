@@ -1,3 +1,10 @@
+import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
 // API 호출을 위한 유틸리티 함수들
 
 export async function analyzeSQLQuery(query: string) {
@@ -59,7 +66,7 @@ export const storage = {
     }
   },
 
-  set: (key: string, value: any) => {
+  set: (key: string, value: unknown) => {
     if (typeof window === "undefined") return;
     localStorage.setItem(key, JSON.stringify(value));
   },
