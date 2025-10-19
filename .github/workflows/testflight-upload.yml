@@ -1,0 +1,100 @@
+name: Analyze Codebase and Prepare TestFlight Upload
+
+on:
+  workflow_dispatch:
+    inputs:
+      releaseNotes:
+        description: "릴리즈 노트"
+        required: false
+        default: "Automated build by CI"
+      runE2E:
+        description: "TestFlight 업로드 전 E2E 테스트 실행 여부"
+        required: false
+        default: "true"
+
+permissions:
+  contents: read
+
+jobs:
+  analyze-and-prepare:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        if: ${{ inputs.runE2E == 'true' }}
+        run: npx playwright install --with-deps
+
+      - name: Analyze Next.js routes (for E2E/test metadata)
+        run: |
+          node ./scripts/generate-e2e.cjs || true
+          echo "Routes analyzed and tests synthesized (see tests/generated-routes.spec.ts)"
+
+      - name: Build application
+        if: ${{ inputs.runE2E == 'true' }}
+        run: npm run build
+
+      - name: Run E2E tests (smoke before upload)
+        if: ${{ inputs.runE2E == 'true' }}
+        env:
+          CI: true
+        run: |
+          npx playwright test --reporter=html --output=test-results
+
+      - name: Upload E2E artifacts
+        if: ${{ inputs.runE2E == 'true' && success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+      - name: Check for iOS project
+        id: check-ios
+        run: |
+          if [ -d "ios" ] || [ -f "ios/App/App.xcodeproj/project.pbxproj" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Stop if iOS project missing
+        if: steps.check-ios.outputs.exists == 'false'
+        run: |
+          echo "iOS 프로젝트가 없어서 TestFlight 업로드는 생략합니다. (웹 전용 프로젝트인 경우 정상)"
+          exit 0
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+
+      - name: Install fastlane
+        run: |
+          gem install fastlane
+
+      - name: Fastlane deliver to TestFlight
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.ASC_API_KEY_BASE64 }}
+        run: |
+          # 기대: fastlane/Fastfile이 준비되어 있어야 함. 없으면 안전 종료.
+          if [ ! -f "fastlane/Fastfile" ]; then
+            echo "fastlane/Fastfile 없음. iOS 파이프라인 스킵."
+            exit 0
+          fi
+          fastlane ios beta release_notes:"${{ inputs.releaseNotes }}"

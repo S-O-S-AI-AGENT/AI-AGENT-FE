@@ -70,6 +70,15 @@ export default function Home() {
       gradient: "from-cyan-500 to-teal-600",
       stats: "2만+ 프로젝트 생성",
     },
+    {
+      icon: "🔍",
+      title: "AI 코드 분석기",
+      description:
+        "AI를 활용하여 코드 품질을 분석하고 개선점을 GitHub 이슈로 생성합니다.",
+      href: "/code-analyzer",
+      gradient: "from-indigo-500 to-purple-600",
+      stats: "품질 향상 보장",
+    },
   ];
 
   return (
