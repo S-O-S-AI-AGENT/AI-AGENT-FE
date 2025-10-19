@@ -18,27 +18,29 @@
     "test:ci": "playwright test --reporter=html,json --output=test-results"
   },
   "dependencies": {
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "next": "15.5.3",
+    "@google/genai": "^1.25.0",
+    "@monaco-editor/react": "^4.6.0",
     "@radix-ui/react-dialog": "^1.1.1",
     "@radix-ui/react-select": "^2.0.0",
     "@radix-ui/react-tabs": "^1.0.4",
-    "react-syntax-highlighter": "^15.5.0",
+    "mime": "^4.1.0",
     "monaco-editor": "^0.44.0",
-    "@monaco-editor/react": "^4.6.0"
+    "next": "15.5.3",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-syntax-highlighter": "^15.5.0"
   },
   "devDependencies": {
-    "typescript": "^5",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
-    "eslint": "^9",
-    "eslint-config-next": "15.5.3",
     "@eslint/eslintrc": "^3",
     "@playwright/test": "^1.40.0",
-    "@types/react-syntax-highlighter": "^15.5.11"
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20.19.22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/react-syntax-highlighter": "^15.5.11",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.3",
+    "tailwindcss": "^4",
+    "typescript": "^5"
   }
 }
