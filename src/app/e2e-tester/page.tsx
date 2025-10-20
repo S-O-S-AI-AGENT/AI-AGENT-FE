@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import type { ReactNode } from "react";
 import PageHeader from "@/components/PageHeader";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
@@ -34,6 +34,7 @@ interface LogEntry {
   codeBlock?: string;
   link?: { href: string; label: string };
   timestamp: string;
+  isExpanded?: boolean;
 }
 
 interface ReportData {
@@ -133,6 +134,7 @@ const normalizeLog = (input: unknown): LogEntry => {
       codeBlock: logObject.codeBlock,
       link: logObject.link,
       timestamp: logObject.timestamp ?? new Date().toISOString(),
+      isExpanded: logObject.codeBlock ? false : undefined, // codeBlock이 있으면 기본적으로 접힌 상태
     };
   }
 
@@ -188,6 +190,22 @@ export default function E2ETesterPage() {
   const [report, setReport] = useState<ReportData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const logContainerRef = useRef<HTMLDivElement>(null);
+
+  const toggleLogExpanded = (logId: string) => {
+    setLogs((prevLogs) =>
+      prevLogs.map((log) =>
+        log.id === logId ? { ...log, isExpanded: !log.isExpanded } : log,
+      ),
+    );
+  };
+
+  // 새 로그가 추가될 때 자동 스크롤
+  useEffect(() => {
+    if (logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    }
+  }, [logs]);
 
   useEffect(() => {
     const saved = localStorage.getItem("e2e-tester-dark-mode");
@@ -321,8 +339,9 @@ export default function E2ETesterPage() {
               >
                 (모델: gemini-2.5-pro)
               </span>
-              가 Playwright 테스트 스크립트를 작성하고, 프로젝트에 PR을 생성한
-              후 GitHub Actions 워크플로우를 실행합니다.
+              가 Playwright 테스트 스크립트와 GitHub Actions 워크플로우를
+              생성하여 PR로 제출합니다. PR은 자동으로 병합되지 않으니 검토 후
+              직접 병합하세요.
             </p>
           </header>
 
@@ -415,8 +434,9 @@ export default function E2ETesterPage() {
               <Stepper currentStep={step} steps={automationSteps} />
 
               <div
+                ref={logContainerRef}
                 className={cn(
-                  "max-h-[28rem] overflow-y-auto rounded-3xl border p-6 shadow-inner transition-colors",
+                  "max-h-[28rem] overflow-y-auto rounded-3xl border p-6 shadow-inner transition-colors scroll-smooth",
                   isDarkMode
                     ? "border-slate-800 bg-slate-900/60"
                     : "border-slate-200 bg-white",
@@ -488,14 +508,41 @@ export default function E2ETesterPage() {
                                 </span>
                               </div>
                             </div>
-                            <p
-                              className={cn(
-                                "text-base font-medium leading-relaxed",
-                                styles.text,
-                              )}
-                            >
-                              {log.message}
-                            </p>
+                            <div className="space-y-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <p
+                                  className={cn(
+                                    "flex-1 text-base font-medium leading-relaxed",
+                                    styles.text,
+                                  )}
+                                >
+                                  {log.message}
+                                </p>
+                                {log.codeBlock && (
+                                  <button
+                                    onClick={() => toggleLogExpanded(log.id)}
+                                    className={cn(
+                                      "flex flex-none items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all hover:scale-105",
+                                      isDarkMode
+                                        ? "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-slate-100"
+                                        : "bg-slate-200 text-slate-700 hover:bg-slate-300 hover:text-slate-900",
+                                    )}
+                                  >
+                                    {log.isExpanded ? (
+                                      <>
+                                        <span>접기</span>
+                                        <span className="text-[10px]">▲</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span>펼치기</span>
+                                        <span className="text-[10px]">▼</span>
+                                      </>
+                                    )}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
                             {log.details && log.details.length > 0 && (
                               <dl
                                 className={cn(
@@ -534,10 +581,36 @@ export default function E2ETesterPage() {
                                 ))}
                               </dl>
                             )}
-                            {log.codeBlock && (
-                              <pre className="rounded-2xl bg-slate-900/90 p-4 text-xs text-slate-100 shadow-inner">
-                                <code>{log.codeBlock}</code>
-                              </pre>
+                            {log.codeBlock && log.isExpanded && (
+                              <div
+                                className={cn(
+                                  "animate-in slide-in-from-top-2 fade-in-0 duration-200 rounded-2xl p-4 text-xs shadow-inner border",
+                                  isDarkMode
+                                    ? "bg-slate-900/90 text-slate-100 border-slate-700"
+                                    : "bg-slate-100 text-slate-900 border-slate-300",
+                                )}
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <span
+                                    className={cn(
+                                      "text-[10px] font-bold uppercase tracking-wider",
+                                      isDarkMode
+                                        ? "text-slate-400"
+                                        : "text-slate-600",
+                                    )}
+                                  >
+                                    {log.title?.includes("LLM") ||
+                                    log.title?.includes("프롬프트")
+                                      ? "프롬프트 / 응답"
+                                      : "코드 미리보기"}
+                                  </span>
+                                </div>
+                                <pre className="overflow-x-auto max-h-96 overflow-y-auto">
+                                  <code className="text-xs leading-relaxed">
+                                    {log.codeBlock}
+                                  </code>
+                                </pre>
+                              </div>
                             )}
                             {log.link && (
                               <a
@@ -572,13 +645,24 @@ export default function E2ETesterPage() {
                   )}
                 >
                   <header className="mb-4 flex items-center justify-between">
-                    <h3 className="text-lg font-semibold">자동화 리포트</h3>
+                    <h3
+                      className={cn(
+                        "text-xl font-bold",
+                        isDarkMode ? "text-slate-200" : "text-black",
+                      )}
+                    >
+                      자동화 리포트
+                    </h3>
                     <span
                       className={cn(
                         "rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide",
                         report.status === "success"
-                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200"
-                          : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200",
+                          ? isDarkMode
+                            ? "bg-emerald-900/40 text-emerald-200"
+                            : "bg-emerald-100 text-emerald-700"
+                          : isDarkMode
+                          ? "bg-amber-900/40 text-amber-200"
+                          : "bg-amber-100 text-amber-700",
                       )}
                     >
                       {report.status}
@@ -586,37 +670,82 @@ export default function E2ETesterPage() {
                   </header>
 
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="rounded-2xl bg-slate-50/80 p-4 text-sm dark:bg-slate-900/60">
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    <div
+                      className={cn(
+                        "rounded-2xl p-4 text-sm",
+                        isDarkMode ? "bg-slate-900/60" : "bg-slate-50/80",
+                      )}
+                    >
+                      <h4
+                        className={cn(
+                          "text-xs font-bold uppercase tracking-wide",
+                          isDarkMode ? "text-slate-400" : "text-slate-600",
+                        )}
+                      >
                         모델 정보
                       </h4>
-                      <p className="mt-2 text-slate-700 dark:text-slate-200">
+                      <p
+                        className={cn(
+                          "mt-2 font-semibold",
+                          isDarkMode ? "text-slate-200" : "text-black",
+                        )}
+                      >
                         {report.llm.provider} · {report.llm.model}
                       </p>
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      <p
+                        className={cn(
+                          "mt-1 text-xs font-medium",
+                          isDarkMode ? "text-slate-400" : "text-slate-600",
+                        )}
+                      >
                         테스트 스크립트는 Gemini가 저장소 컨텍스트를 분석해
                         생성했습니다.
                       </p>
                     </div>
-                    <div className="rounded-2xl bg-slate-50/80 p-4 text-sm dark:bg-slate-900/60">
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    <div
+                      className={cn(
+                        "rounded-2xl p-4 text-sm",
+                        isDarkMode ? "bg-slate-900/60" : "bg-slate-50/80",
+                      )}
+                    >
+                      <h4
+                        className={cn(
+                          "text-xs font-bold uppercase tracking-wide",
+                          isDarkMode ? "text-slate-400" : "text-slate-600",
+                        )}
+                      >
                         생성 아티팩트
                       </h4>
-                      <ul className="mt-2 space-y-1 text-slate-700 dark:text-slate-200">
+                      <ul
+                        className={cn(
+                          "mt-2 space-y-1 font-medium",
+                          isDarkMode ? "text-slate-200" : "text-black",
+                        )}
+                      >
                         <li>
                           테스트 파일:{" "}
-                          <span className="font-medium">
+                          <span className="font-bold">
                             {report.testFile.path}
                           </span>
                         </li>
-                        <li>브랜치: {report.testFile.branch}</li>
+                        <li>
+                          브랜치:{" "}
+                          <span className="font-bold">
+                            {report.testFile.branch}
+                          </span>
+                        </li>
                       </ul>
                       <div className="mt-2 flex flex-wrap gap-3 text-xs">
                         <a
                           href={report.workflowUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 rounded-full border border-indigo-200 px-3 py-1 font-semibold text-indigo-600 transition hover:bg-indigo-50 dark:border-indigo-500/40 dark:text-indigo-200 dark:hover:bg-indigo-900/40"
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full border px-3 py-1 font-bold transition",
+                            isDarkMode
+                              ? "border-indigo-500/40 text-indigo-200 hover:bg-indigo-900/40"
+                              : "border-indigo-200 text-indigo-600 hover:bg-indigo-50",
+                          )}
                         >
                           워크플로우 로그 보기
                         </a>
@@ -625,7 +754,12 @@ export default function E2ETesterPage() {
                             href={report.issueUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 rounded-full border border-rose-200 px-3 py-1 font-semibold text-rose-600 transition hover:bg-rose-50 dark:border-rose-500/40 dark:text-rose-200 dark:hover:bg-rose-900/40"
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-full border px-3 py-1 font-bold transition",
+                              isDarkMode
+                                ? "border-rose-500/40 text-rose-200 hover:bg-rose-900/40"
+                                : "border-rose-200 text-rose-600 hover:bg-rose-50",
+                            )}
                           >
                             실패 리포트 확인
                           </a>
@@ -635,11 +769,28 @@ export default function E2ETesterPage() {
                   </div>
 
                   {report.testIntents.length > 0 && (
-                    <div className="mt-6 rounded-2xl border border-slate-200/60 bg-slate-50/80 p-4 text-sm dark:border-slate-800 dark:bg-slate-900/60">
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    <div
+                      className={cn(
+                        "mt-6 rounded-2xl border p-4 text-sm",
+                        isDarkMode
+                          ? "border-slate-800 bg-slate-900/60"
+                          : "border-slate-200/60 bg-slate-50/80",
+                      )}
+                    >
+                      <h4
+                        className={cn(
+                          "text-xs font-bold uppercase tracking-wide",
+                          isDarkMode ? "text-slate-400" : "text-slate-600",
+                        )}
+                      >
                         테스트 시나리오 개요
                       </h4>
-                      <ol className="mt-2 list-decimal space-y-1 pl-5 text-slate-700 dark:text-slate-200">
+                      <ol
+                        className={cn(
+                          "mt-2 list-decimal space-y-1 pl-5 font-medium",
+                          isDarkMode ? "text-slate-200" : "text-black",
+                        )}
+                      >
                         {report.testIntents.map((intent, index) => (
                           <li key={`${intent}-${index}`}>{intent}</li>
                         ))}
@@ -647,11 +798,30 @@ export default function E2ETesterPage() {
                     </div>
                   )}
 
-                  <div className="mt-6 rounded-2xl border border-slate-200/60 bg-slate-50/80 p-4 text-sm dark:border-slate-800 dark:bg-slate-900/60">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <div
+                    className={cn(
+                      "mt-6 rounded-2xl border p-4 text-sm",
+                      isDarkMode
+                        ? "border-slate-800 bg-slate-900/60"
+                        : "border-slate-200/60 bg-slate-50/80",
+                    )}
+                  >
+                    <h4
+                      className={cn(
+                        "text-xs font-bold uppercase tracking-wide",
+                        isDarkMode ? "text-slate-400" : "text-slate-600",
+                      )}
+                    >
                       스크립트 미리보기
                     </h4>
-                    <pre className="mt-3 max-h-64 overflow-y-auto rounded-2xl bg-slate-900/90 p-4 text-xs text-slate-100 shadow-inner">
+                    <pre
+                      className={cn(
+                        "mt-3 max-h-64 overflow-y-auto rounded-2xl p-4 text-xs shadow-inner",
+                        isDarkMode
+                          ? "bg-slate-900/90 text-slate-100"
+                          : "bg-slate-100 text-slate-900",
+                      )}
+                    >
                       <code>{report.scriptPreview}</code>
                     </pre>
                   </div>

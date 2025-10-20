@@ -237,7 +237,8 @@ export async function POST(request: NextRequest) {
             message: "생성된 테스트 스크립트를 저장소에 반영합니다.",
           });
 
-          branchName = `feature/e2e-${Date.now()}`;
+          const timestamp = Date.now();
+          branchName = `feature/e2e-${timestamp}`;
           const mainBranch = await octokit.repos.getBranch({
             owner,
             repo,
@@ -250,7 +251,9 @@ export async function POST(request: NextRequest) {
             sha: mainBranch.data.commit.sha,
           });
 
-          testFileName = `generated-e2e-${Date.now()}.spec.ts`;
+          testFileName = `generated-e2e-${timestamp}.spec.ts`;
+
+          // 테스트 파일 추가
           await octokit.repos.createOrUpdateFileContents({
             owner,
             repo,
@@ -266,6 +269,82 @@ export async function POST(request: NextRequest) {
             details: [
               { label: "브랜치", value: branchName },
               { label: "테스트 파일", value: `tests/${testFileName}` },
+            ],
+          });
+
+          // GitHub Actions workflow 파일 추가
+          const workflowContent = `name: E2E Test - ${testFileName.replace(
+            ".spec.ts",
+            "",
+          )}
+
+on:
+  push:
+    branches: [${branchName}]
+  pull_request:
+    branches: [${snapshot.defaultBranch}]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Build application
+        run: npm run build
+
+      - name: Run E2E tests
+        run: npx playwright test ${testFileName}
+        env:
+          CI: true
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-${testFileName.replace(".spec.ts", "")}
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 30
+`;
+
+          const workflowFileName = `e2e-${timestamp}.yml`;
+          await octokit.repos.createOrUpdateFileContents({
+            owner,
+            repo,
+            path: `.github/workflows/${workflowFileName}`,
+            message: `chore: add GitHub Actions workflow for E2E test`,
+            content: Buffer.from(workflowContent).toString("base64"),
+            branch: branchName,
+          });
+
+          streamLog({
+            title: "GitHub Actions Workflow 추가",
+            message: "E2E 테스트를 위한 워크플로우 파일이 추가되었습니다.",
+            level: "success",
+            details: [
+              { label: "워크플로우", value: workflowFileName },
+              { label: "트리거", value: "Push, PR, Manual" },
             ],
           });
 
@@ -285,36 +364,26 @@ export async function POST(request: NextRequest) {
 
           streamLog({
             title: "Pull Request 생성",
-            message: `PR #${pr.data.number}가 생성되었습니다.`,
+            message: `PR #${pr.data.number}가 생성되었습니다. PR을 검토한 후 수동으로 머지할 수 있습니다.`,
             level: "success",
             link: { href: pr.data.html_url, label: "PR 바로가기" },
           });
 
-          const merge = await octokit.pulls.merge({
+          streamResponse("running_tests");
+
+          // PR 브랜치의 최신 커밋 SHA 가져오기
+          const branch = await octokit.repos.getBranch({
             owner,
             repo,
-            pull_number: pr.data.number,
+            branch: branchName,
           });
-
-          mergeCommitSha = merge.data.sha ?? "";
-
-          streamLog({
-            title: "Pull Request 병합",
-            message: "새로운 테스트가 기본 브랜치에 병합되었습니다.",
-            level: "success",
-            details: [
-              { label: "병합 커밋", value: mergeCommitSha.substring(0, 7) },
-              { label: "기본 브랜치", value: snapshot.defaultBranch },
-            ],
-          });
-
-          streamResponse("running_tests");
+          mergeCommitSha = branch.data.commit.sha;
 
           const workflowRun = await waitForWorkflowRun({
             octokit,
             owner,
             repo,
-            branch: snapshot.defaultBranch,
+            branch: branchName,
             commitSha: mergeCommitSha,
             onPoll: (status) => {
               streamLog({
@@ -582,9 +651,19 @@ function buildPullRequestBody({
 - Source repository: ${repoUrl}
 - Model: ${modelId}
 - Test file: \`tests/${testFileName}\`
+- GitHub Actions workflow: \`.github/workflows/e2e-*.yml\`
 
 ### Covered scenarios
 ${intentsList}
+
+### 📋 What's included
+- ✅ Playwright E2E test script
+- ✅ GitHub Actions workflow for automated testing
+- ✅ Test will run on push and pull request events
+
+### 🔍 Review Guide
+Please review the generated test and workflow files before merging.
+The workflow will automatically run when you push to this branch.
 
 Generated automatically to keep regression coverage up-to-date.`;
 }
