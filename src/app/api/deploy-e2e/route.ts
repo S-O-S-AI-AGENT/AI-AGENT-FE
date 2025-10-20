@@ -40,6 +40,7 @@ type AutomationSummary = {
   scriptPreview: string;
   repoUrl: string;
   issueUrl?: string;
+  llmRawResponse?: string;
 };
 
 interface RepoSnapshot {
@@ -195,6 +196,9 @@ export async function POST(request: NextRequest) {
             contents: [{ role: "user", parts: [{ text: prompt }] }],
           });
 
+          // 보조: 원본 LLM 응답 전체를 보관
+          const rawLLMResponse = JSON.stringify(scriptResult, null, 2);
+
           if (!scriptResult.candidates?.[0]?.content?.parts?.[0]?.text) {
             throw new Error("AI로부터 유효한 스크립트를 생성하지 못했습니다.");
           }
@@ -217,6 +221,14 @@ export async function POST(request: NextRequest) {
                 }))
               : undefined,
             codeBlock: truncateCodeBlock(testScriptContent),
+          });
+
+          // LLM의 원문 응답도 스트림으로 전송 (사용자가 전체 응답을 확인할 수 있도록)
+          streamLog({
+            title: "LLM 원문 응답",
+            message: "모델의 전체 응답을 포함합니다.",
+            level: "info",
+            codeBlock: rawLLMResponse,
           });
 
           streamResponse("creating_pull_request");
@@ -354,6 +366,7 @@ export async function POST(request: NextRequest) {
               testFile: { path: `tests/${testFileName}`, branch: branchName },
               testIntents,
               scriptPreview: truncateCodeBlock(testScriptContent),
+              llmRawResponse: rawLLMResponse,
               repoUrl,
               issueUrl: issue.data.html_url,
             };
@@ -365,6 +378,7 @@ export async function POST(request: NextRequest) {
               testFile: { path: `tests/${testFileName}`, branch: branchName },
               testIntents,
               scriptPreview: truncateCodeBlock(testScriptContent),
+              llmRawResponse: rawLLMResponse,
               repoUrl,
             };
           }

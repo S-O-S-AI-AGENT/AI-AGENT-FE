@@ -57,36 +57,45 @@ const automationSteps: { id: Step; name: string }[] = [
   { id: "done", name: "완료" },
 ];
 
-const levelStyles: Record<
-  LogLevel,
-  { icon: ReactNode; badge: string; border: string; text: string }
-> = {
-  info: {
-    icon: <Icons.Zap className="h-4 w-4" />,
-    badge: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200",
-    border: "border-blue-200 dark:border-blue-900/60",
-    text: "text-blue-800 dark:text-blue-100",
-  },
-  success: {
-    icon: <Icons.CheckCircle className="h-4 w-4" />,
-    badge:
-      "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200",
-    border: "border-emerald-200 dark:border-emerald-900/60",
-    text: "text-emerald-800 dark:text-emerald-100",
-  },
-  warning: {
-    icon: <Icons.AlertTriangle className="h-4 w-4" />,
-    badge:
-      "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200",
-    border: "border-amber-200 dark:border-amber-900/60",
-    text: "text-amber-800 dark:text-amber-100",
-  },
-  error: {
-    icon: <Icons.XCircle className="h-4 w-4" />,
-    badge: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200",
-    border: "border-rose-200 dark:border-rose-900/60",
-    text: "text-rose-800 dark:text-rose-100",
-  },
+const getLevelStyles = (
+  level: LogLevel,
+  isDark: boolean,
+): { icon: ReactNode; badge: string; border: string; text: string } => {
+  const stylesMap = {
+    info: {
+      icon: <Icons.Zap className="h-4 w-4" />,
+      badge: isDark
+        ? "bg-blue-900/40 text-blue-200"
+        : "bg-blue-100 text-blue-700",
+      border: isDark ? "border-blue-900/60" : "border-blue-200",
+      text: isDark ? "text-blue-100" : "text-blue-800",
+    },
+    success: {
+      icon: <Icons.CheckCircle className="h-4 w-4" />,
+      badge: isDark
+        ? "bg-emerald-900/40 text-emerald-200"
+        : "bg-emerald-100 text-emerald-700",
+      border: isDark ? "border-emerald-900/60" : "border-emerald-200",
+      text: isDark ? "text-emerald-100" : "text-emerald-800",
+    },
+    warning: {
+      icon: <Icons.AlertTriangle className="h-4 w-4" />,
+      badge: isDark
+        ? "bg-amber-900/40 text-amber-200"
+        : "bg-amber-100 text-amber-700",
+      border: isDark ? "border-amber-900/60" : "border-amber-200",
+      text: isDark ? "text-amber-100" : "text-amber-800",
+    },
+    error: {
+      icon: <Icons.XCircle className="h-4 w-4" />,
+      badge: isDark
+        ? "bg-rose-900/40 text-rose-200"
+        : "bg-rose-100 text-rose-700",
+      border: isDark ? "border-rose-900/60" : "border-rose-200",
+      text: isDark ? "text-rose-100" : "text-rose-800",
+    },
+  };
+  return stylesMap[level];
 };
 
 const generateLogId = () =>
@@ -287,7 +296,7 @@ export default function E2ETesterPage() {
       <main className="container mx-auto px-4 py-10">
         <section
           className={cn(
-            "mx-auto flex w-full max-w-3xl flex-col gap-8 rounded-3xl border px-6 py-8 shadow-xl backdrop-blur-sm transition-colors duration-300 sm:px-10",
+            "mx-auto flex w-full max-w-4xl flex-col gap-8 rounded-3xl border px-6 py-8 shadow-xl backdrop-blur-sm transition-colors duration-300 sm:px-12",
             isDarkMode
               ? "border-slate-800/80 bg-slate-900/70"
               : "border-slate-200 bg-white/80",
@@ -297,9 +306,19 @@ export default function E2ETesterPage() {
             <h2 className="text-3xl font-semibold tracking-tight">
               저장소를 분석하고 테스트를 자동으로 생성하세요
             </h2>
-            <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
+            <p
+              className={cn(
+                "mt-3 text-base font-medium",
+                isDarkMode ? "text-slate-300" : "text-black",
+              )}
+            >
               GitHub 저장소 URL을 입력하면 Gemini{" "}
-              <span className="font-medium text-indigo-600 dark:text-indigo-300">
+              <span
+                className={cn(
+                  "font-bold",
+                  isDarkMode ? "text-indigo-300" : "text-indigo-600",
+                )}
+              >
                 (모델: gemini-2.5-pro)
               </span>
               가 Playwright 테스트 스크립트를 작성하고, 프로젝트에 PR을 생성한
@@ -312,7 +331,10 @@ export default function E2ETesterPage() {
               <div className="sm:col-span-2">
                 <label
                   htmlFor="repoUrl"
-                  className="block text-sm font-medium text-slate-700 dark:text-slate-200"
+                  className={cn(
+                    "block text-base font-bold",
+                    isDarkMode ? "text-slate-200" : "text-black",
+                  )}
                 >
                   GitHub 저장소 URL
                 </label>
@@ -322,10 +344,10 @@ export default function E2ETesterPage() {
                   id="repoUrl"
                   required
                   className={cn(
-                    "mt-2 w-full rounded-2xl border px-4 py-3 text-sm shadow-sm transition focus:outline-none focus:ring-2",
+                    "mt-2 w-full rounded-2xl border px-4 py-3 text-base font-medium shadow-sm transition focus:outline-none focus:ring-2",
                     isDarkMode
                       ? "border-slate-700 bg-slate-900/80 text-slate-100 focus:border-indigo-400 focus:ring-indigo-500/50"
-                      : "border-slate-200 bg-white text-slate-900 focus:border-indigo-400 focus:ring-indigo-400/40",
+                      : "border-slate-200 bg-white text-black focus:border-indigo-400 focus:ring-indigo-400/40",
                   )}
                   value={repoUrl}
                   onChange={(e) => setRepoUrl(e.target.value)}
@@ -336,7 +358,10 @@ export default function E2ETesterPage() {
               <div className="sm:col-span-2">
                 <label
                   htmlFor="githubToken"
-                  className="block text-sm font-medium text-slate-700 dark:text-slate-200"
+                  className={cn(
+                    "block text-base font-bold",
+                    isDarkMode ? "text-slate-200" : "text-black",
+                  )}
                 >
                   GitHub 토큰 (선택 사항)
                 </label>
@@ -345,16 +370,21 @@ export default function E2ETesterPage() {
                   name="githubToken"
                   id="githubToken"
                   className={cn(
-                    "mt-2 w-full rounded-2xl border px-4 py-3 text-sm shadow-sm transition focus:outline-none focus:ring-2",
+                    "mt-2 w-full rounded-2xl border px-4 py-3 text-base font-medium shadow-sm transition focus:outline-none focus:ring-2",
                     isDarkMode
                       ? "border-slate-700 bg-slate-900/80 text-slate-100 focus:border-indigo-400 focus:ring-indigo-500/50"
-                      : "border-slate-200 bg-white text-slate-900 focus:border-indigo-400 focus:ring-indigo-400/40",
+                      : "border-slate-200 bg-white text-black focus:border-indigo-400 focus:ring-indigo-400/40",
                   )}
                   value={githubToken}
                   onChange={(e) => setGithubToken(e.target.value)}
                   placeholder="ghp_..."
                 />
-                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                <p
+                  className={cn(
+                    "mt-2 text-sm font-medium",
+                    isDarkMode ? "text-slate-400" : "text-black",
+                  )}
+                >
                   비공개 저장소 분석 또는 이슈 생성을 위해 토큰이 필요할 수
                   있습니다. 토큰은 로컬 스토리지에 저장되지 않으며, 브라우저
                   메모리에서만 사용됩니다.
@@ -393,16 +423,26 @@ export default function E2ETesterPage() {
                 )}
               >
                 <header className="mb-4 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <h3
+                    className={cn(
+                      "text-xl font-bold",
+                      isDarkMode ? "text-slate-200" : "text-black",
+                    )}
+                  >
                     실시간 로그
                   </h3>
-                  <span className="text-xs text-slate-400 dark:text-slate-500">
+                  <span
+                    className={cn(
+                      "text-sm font-semibold",
+                      isDarkMode ? "text-slate-500" : "text-black",
+                    )}
+                  >
                     {logs.length} entries
                   </span>
                 </header>
                 <ul className="space-y-4">
                   {logs.map((log) => {
-                    const styles = levelStyles[log.level];
+                    const styles = getLevelStyles(log.level, isDarkMode);
                     return (
                       <li
                         key={log.id}
@@ -425,29 +465,69 @@ export default function E2ETesterPage() {
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <div className="flex items-center gap-2">
                                 {log.title && (
-                                  <span className="text-sm font-semibold">
+                                  <span
+                                    className={cn(
+                                      "text-base font-bold",
+                                      isDarkMode
+                                        ? "text-slate-100"
+                                        : "text-black",
+                                    )}
+                                  >
                                     {log.title}
                                   </span>
                                 )}
-                                <span className="text-xs text-slate-400 dark:text-slate-500">
+                                <span
+                                  className={cn(
+                                    "text-sm font-medium",
+                                    isDarkMode
+                                      ? "text-slate-500"
+                                      : "text-black",
+                                  )}
+                                >
                                   {formatTimestamp(log.timestamp)}
                                 </span>
                               </div>
                             </div>
-                            <p className={cn("leading-relaxed", styles.text)}>
+                            <p
+                              className={cn(
+                                "text-base font-medium leading-relaxed",
+                                styles.text,
+                              )}
+                            >
                               {log.message}
                             </p>
                             {log.details && log.details.length > 0 && (
-                              <dl className="grid gap-2 rounded-2xl border border-slate-200/60 bg-slate-50/60 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-900/40">
+                              <dl
+                                className={cn(
+                                  "grid gap-2 rounded-2xl border px-3 py-2 text-sm",
+                                  isDarkMode
+                                    ? "border-slate-800 bg-slate-900/40"
+                                    : "border-slate-200/60 bg-slate-50/60",
+                                )}
+                              >
                                 {log.details.map((detail) => (
                                   <div
                                     key={`${log.id}-${detail.label}`}
                                     className="flex justify-between gap-3"
                                   >
-                                    <dt className="font-medium text-slate-500 dark:text-slate-400">
+                                    <dt
+                                      className={cn(
+                                        "font-bold",
+                                        isDarkMode
+                                          ? "text-slate-400"
+                                          : "text-black",
+                                      )}
+                                    >
                                       {detail.label}
                                     </dt>
-                                    <dd className="text-right text-slate-600 dark:text-slate-300">
+                                    <dd
+                                      className={cn(
+                                        "text-right font-semibold",
+                                        isDarkMode
+                                          ? "text-slate-300"
+                                          : "text-black",
+                                      )}
+                                    >
                                       {detail.value}
                                     </dd>
                                   </div>
@@ -464,7 +544,12 @@ export default function E2ETesterPage() {
                                 href={log.link.href}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 underline decoration-indigo-300 decoration-2 underline-offset-4 transition hover:text-indigo-500 dark:text-indigo-300 dark:hover:text-indigo-200"
+                                className={cn(
+                                  "inline-flex items-center gap-1 text-sm font-semibold underline decoration-2 underline-offset-4 transition",
+                                  isDarkMode
+                                    ? "text-indigo-300 decoration-indigo-400 hover:text-indigo-200"
+                                    : "text-indigo-600 decoration-indigo-300 hover:text-indigo-500",
+                                )}
                               >
                                 {log.link.label}
                               </a>
