@@ -1,13 +1,56 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { Octokit } from "@octokit/rest";
 
 type Step =
   | "analyzing"
-  | "generating_script"
-  | "creating_workflow"
-  | "running_workflow"
-  | "creating_issue";
+  | "generating_test_script"
+  | "creating_pull_request"
+  | "running_tests"
+  | "reporting_results";
+
+type LogLevel = "info" | "success" | "warning" | "error";
+
+type LogDetail = {
+  label: string;
+  value: string;
+};
+
+type StreamLogPayload = {
+  title?: string;
+  message: string;
+  level?: LogLevel;
+  details?: LogDetail[];
+  codeBlock?: string;
+  link?: { href: string; label: string };
+};
+
+type AutomationSummary = {
+  workflowUrl: string;
+  status: string;
+  llm: {
+    provider: string;
+    model: string;
+  };
+  testFile: {
+    path: string;
+    branch: string;
+  };
+  testIntents: string[];
+  scriptPreview: string;
+  repoUrl: string;
+  issueUrl?: string;
+};
+
+interface RepoSnapshot {
+  promptContext: string;
+  fileCount: number;
+  defaultBranch: string;
+  importantFiles: { path: string; snippet: string }[];
+  frameworks: string[];
+}
+
+const MODEL_ID = "gemini-2.5-pro";
 
 export async function POST(request: NextRequest) {
   const { repoUrl, githubToken } = await request.json();
@@ -20,30 +63,59 @@ export async function POST(request: NextRequest) {
         close: () => controller.close(),
       };
 
-      const streamResponse = (step: Step, data: object) => {
-        const jsonString = JSON.stringify({ step, ...data });
-        writer.write(`data: ${jsonString}\n\n`);
+      let streamClosed = false;
+
+      const closeStream = () => {
+        if (!streamClosed) {
+          writer.close();
+          streamClosed = true;
+        }
       };
 
-      const streamLog = (log: string) => {
-        const jsonString = JSON.stringify({ log });
-        writer.write(`data: ${jsonString}\n\n`);
+      const streamMessage = (payload: object) => {
+        if (streamClosed) return;
+        writer.write(`data: ${JSON.stringify(payload)}\n\n`);
+      };
+
+      const streamResponse = (step: Step, data: object = {}) => {
+        streamMessage({ step, ...data });
+      };
+
+      const streamLog = (log: StreamLogPayload) => {
+        const enriched = {
+          ...log,
+          level: log.level ?? "info",
+          timestamp: new Date().toISOString(),
+        };
+        streamMessage({ log: enriched });
       };
 
       const streamError = (error: string) => {
-        const jsonString = JSON.stringify({ error });
-        writer.write(`data: ${jsonString}\n\n`);
-        writer.close();
+        streamMessage({ error });
+        closeStream();
       };
 
-      const streamResult = (resultUrl: string) => {
-        const jsonString = JSON.stringify({ result: resultUrl });
-        writer.write(`data: ${jsonString}\n\n`);
-        writer.close();
+      const streamResult = (summary: AutomationSummary) => {
+        streamMessage({ result: summary });
+        closeStream();
+      };
+
+      const safeRun = async (fn: () => Promise<void>) => {
+        try {
+          await fn();
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "알 수 없는 오류가 발생했습니다.";
+          console.error("자동화 오류:", error);
+          streamError(message);
+          throw error;
+        }
       };
 
       try {
-        const urlMatch = repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+        const urlMatch = repoUrl.match(/github\.com\/(.+?)\/(.+?)(?:\.git)?$/);
         if (!urlMatch) {
           streamError("유효하지 않은 GitHub 저장소 URL입니다.");
           return;
@@ -58,209 +130,266 @@ export async function POST(request: NextRequest) {
         }
         const genAI = new GoogleGenAI({ apiKey });
 
-        // 1. 저장소 분석
-        streamResponse("analyzing", {});
-        streamLog(`저장소 분석 시작: ${owner}/${repo}`);
-        const repoContent = await getRepoContent(octokit, owner, repo);
-        if (!repoContent) {
-          streamError("저장소 내용을 가져오는 데 실패했습니다.");
-          return;
-        }
-        streamLog("저장소 분석 완료.");
+        let summary: AutomationSummary | null = null;
+        let testScriptContent = "";
+        let testIntents: string[] = [];
+        let branchName = "";
+        let testFileName = "";
+        let mergeCommitSha = "";
 
-        // 2. TestFlight 스크립트 생성
-        streamResponse("generating_script", {});
-        streamLog("AI를 사용하여 TestFlight 배포 스크립트 생성 중...");
-        const modelId = "gemini-2.5-pro";
-        const scriptPrompt = `
-          다음은 '${owner}/${repo}' 저장소의 내용입니다. 이 프로젝트를 위한 TestFlight 배포 Fastlane 스크립트(Fastfile)를 생성해주세요.
-          주요 정보:
-          - Apple ID: {{APPLE_ID}}
-          - App Identifier: {{APP_IDENTIFIER}}
-          - Git URL: ${repoUrl}
+        await safeRun(async () => {
+          streamResponse("analyzing");
+          streamLog({
+            title: "저장소 분석 준비",
+            message: `${owner}/${repo} 저장소 구조를 분석하고 있습니다.`,
+          });
 
-          스크립트는 다음을 포함해야 합니다:
-          1. 의존성 설치 (bundler)
-          2. 인증서 및 프로비저닝 프로파일 관리 (match)
-          3. 빌드 번호 자동 증가
-          4. 앱 빌드 (gym)
-          5. TestFlight에 업로드 (pilot)
+          const snapshot = await collectRepoSnapshot(octokit, owner, repo);
 
-          스크립트만 제공하고 다른 설명은 생략해주세요.
+          streamLog({
+            title: "저장소 분석 완료",
+            message: "AI 프롬프트 생성을 위한 핵심 정보를 정리했습니다.",
+            details: [
+              { label: "기본 브랜치", value: snapshot.defaultBranch },
+              { label: "파일 수", value: snapshot.fileCount.toString() },
+              {
+                label: "주요 프레임워크",
+                value: snapshot.frameworks.length
+                  ? snapshot.frameworks.join(", ")
+                  : "판별되지 않음",
+              },
+              {
+                label: "참조 파일",
+                value: snapshot.importantFiles
+                  .map((file) => file.path)
+                  .join(", "),
+              },
+            ],
+          });
 
-          저장소 내용:
-          ${repoContent.substring(0, 30000)}
-        `;
+          streamResponse("generating_test_script");
 
-        const scriptResult = await genAI.models.generateContent({
-          model: modelId,
-          contents: [{ role: "user", parts: [{ text: scriptPrompt }] }],
-        });
-
-        if (!scriptResult.candidates?.[0]?.content?.parts?.[0]?.text) {
-          throw new Error("AI로부터 유효한 스크립트를 생성하지 못했습니다.");
-        }
-
-        const fastfileContent = scriptResult.candidates[0].content.parts[0].text
-          .replace(/```ruby\n?|```/g, "")
-          .trim();
-        streamLog("Fastfile 생성 완료.");
-
-        // 3. GitHub Actions 워크플로우 생성
-        streamResponse("creating_workflow", {});
-        streamLog("GitHub Actions 워크플로우 파일 생성 중...");
-        const workflowContent = `
-name: Deploy to TestFlight
-
-on:
-  push:
-    branches:
-      - main
-
-jobs:
-  deploy:
-    runs-on: macos-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '2.7'
-          bundler-cache: true
-
-      - name: Run Fastlane
-        run: bundle exec fastlane ios deploy
-        env:
-          APPLE_ID: \${{ secrets.APPLE_ID }}
-          APP_IDENTIFIER: \${{ secrets.APP_IDENTIFIER }}
-          FASTLANE_USER: \${{ secrets.FASTLANE_USER }}
-          FASTLANE_PASSWORD: \${{ secrets.FASTLANE_PASSWORD }}
-          MATCH_PASSWORD: \${{ secrets.MATCH_PASSWORD }}
-          MATCH_GIT_URL: \${{ secrets.MATCH_GIT_URL }}
-          MATCH_GIT_BASIC_AUTHORIZATION: \${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
-`;
-        const branchName = `feature/testflight-automation-${Date.now()}`;
-        const mainBranch = await octokit.repos.getBranch({
-          owner,
-          repo,
-          branch: "main",
-        });
-        await octokit.git.createRef({
-          owner,
-          repo,
-          ref: `refs/heads/${branchName}`,
-          sha: mainBranch.data.commit.sha,
-        });
-
-        await octokit.repos.createOrUpdateFileContents({
-          owner,
-          repo,
-          path: "fastlane/Fastfile",
-          message: "feat: Add Fastfile for TestFlight deployment",
-          content: Buffer.from(fastfileContent).toString("base64"),
-          branch: branchName,
-        });
-        await octokit.repos.createOrUpdateFileContents({
-          owner,
-          repo,
-          path: ".github/workflows/deploy.yml",
-          message: "feat: Add GitHub Actions workflow for TestFlight",
-          content: Buffer.from(workflowContent).toString("base64"),
-          branch: branchName,
-        });
-        streamLog(
-          `새 브랜치 '${branchName}'에 Fastfile 및 워크플로우 파일 추가 완료.`,
-        );
-
-        const pr = await octokit.pulls.create({
-          owner,
-          repo,
-          title: "feat: TestFlight 배포 자동화",
-          head: branchName,
-          base: "main",
-          body: "AI가 생성한 TestFlight 배포 자동화 스크립트 및 워크플로우입니다.",
-        });
-        await octokit.pulls.merge({ owner, repo, pull_number: pr.data.number });
-        streamLog("Pull Request 생성 및 병합 완료.");
-
-        // 4. 워크플로우 실행 대기
-        streamResponse("running_workflow", {});
-        streamLog("워크플로우 실행을 기다리는 중... (최대 10분)");
-
-        let workflowRun;
-        for (let i = 0; i < 60; i++) {
-          // 10분 (60 * 10초)
-          await new Promise((resolve) => setTimeout(resolve, 10000));
-          const runs = await octokit.actions.listWorkflowRunsForRepo({
+          const prompt = buildTestPrompt({
+            repoUrl,
             owner,
             repo,
-            event: "push",
-            branch: "main",
+            snapshot,
           });
-          workflowRun = runs.data.workflow_runs[0];
-          if (
-            workflowRun &&
-            workflowRun.status !== "in_progress" &&
-            workflowRun.status !== "queued"
-          ) {
-            break;
+
+          streamLog({
+            title: "LLM 호출",
+            message:
+              "Playwright E2E 테스트 생성을 위해 Gemini 모델에 프롬프트를 전송합니다.",
+            details: [
+              { label: "LLM 제공자", value: "Google Gemini" },
+              { label: "사용 모델", value: MODEL_ID },
+              {
+                label: "프롬프트 길이",
+                value: `${prompt.length.toLocaleString()} chars`,
+              },
+            ],
+          });
+
+          const scriptResult = await genAI.models.generateContent({
+            model: MODEL_ID,
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+          });
+
+          if (!scriptResult.candidates?.[0]?.content?.parts?.[0]?.text) {
+            throw new Error("AI로부터 유효한 스크립트를 생성하지 못했습니다.");
           }
-          streamLog(`워크플로우 상태: ${workflowRun?.status || "대기 중"}...`);
-        }
 
-        if (
-          !workflowRun ||
-          workflowRun.status === "in_progress" ||
-          workflowRun.status === "queued"
-        ) {
-          throw new Error("워크플로우 실행 시간이 초과되었습니다.");
-        }
-        streamLog(`워크플로우 실행 완료. 결과: ${workflowRun.conclusion}`);
+          testScriptContent = scriptResult.candidates[0].content.parts[0].text
+            .replace(/```[a-z]*\n?|```/g, "")
+            .trim();
 
-        // 5. 결과 이슈 생성
-        streamResponse("creating_issue", {});
-        const issueTitle = `TestFlight 배포 자동화 결과 (${new Date().toLocaleDateString()})`;
-        const issueBody = `
-## ✈️ TestFlight 배포 자동화 보고서
+          testIntents = extractTestIntents(testScriptContent);
 
-- **저장소**: ${repoUrl}
-- **실행 시간**: ${new Date().toLocaleString()}
-- **워크플로우 실행 결과**: ${workflowRun.conclusion}
-- **워크플로우 로그**: ${workflowRun.html_url}
+          streamLog({
+            title: "테스트 스크립트 생성 완료",
+            message:
+              "핵심 사용자 여정을 검증하는 Playwright 테스트가 생성되었습니다.",
+            level: "success",
+            details: testIntents.length
+              ? testIntents.map((intent, index) => ({
+                  label: `시나리오 ${index + 1}`,
+                  value: intent,
+                }))
+              : undefined,
+            codeBlock: truncateCodeBlock(testScriptContent),
+          });
 
-### 생성된 파일
-- \`fastlane/Fastfile\`
-- \`.github/workflows/deploy.yml\`
+          streamResponse("creating_pull_request");
+          streamLog({
+            title: "Pull Request 준비",
+            message: "생성된 테스트 스크립트를 저장소에 반영합니다.",
+          });
 
-### 다음 단계
-- GitHub 저장소의 Secrets에 필요한 환경변수들을 설정해주세요.
-- 배포 성공 여부를 TestFlight에서 확인해주세요.
-`;
-        const issue = await octokit.issues.create({
-          owner,
-          repo,
-          title: issueTitle,
-          body: issueBody,
+          branchName = `feature/e2e-${Date.now()}`;
+          const mainBranch = await octokit.repos.getBranch({
+            owner,
+            repo,
+            branch: snapshot.defaultBranch,
+          });
+          await octokit.git.createRef({
+            owner,
+            repo,
+            ref: `refs/heads/${branchName}`,
+            sha: mainBranch.data.commit.sha,
+          });
+
+          testFileName = `generated-e2e-${Date.now()}.spec.ts`;
+          await octokit.repos.createOrUpdateFileContents({
+            owner,
+            repo,
+            path: `tests/${testFileName}`,
+            message: `chore: add AI-generated E2E test (${MODEL_ID})`,
+            content: Buffer.from(testScriptContent).toString("base64"),
+            branch: branchName,
+          });
+
+          streamLog({
+            title: "테스트 파일 추가",
+            message: `tests/${testFileName} 파일을 ${branchName} 브랜치에 추가했습니다.`,
+            details: [
+              { label: "브랜치", value: branchName },
+              { label: "테스트 파일", value: `tests/${testFileName}` },
+            ],
+          });
+
+          const pr = await octokit.pulls.create({
+            owner,
+            repo,
+            title: `chore: add AI-generated E2E test (${MODEL_ID})`,
+            head: branchName,
+            base: snapshot.defaultBranch,
+            body: buildPullRequestBody({
+              repoUrl,
+              testFileName,
+              testIntents,
+              modelId: MODEL_ID,
+            }),
+          });
+
+          streamLog({
+            title: "Pull Request 생성",
+            message: `PR #${pr.data.number}가 생성되었습니다.`,
+            level: "success",
+            link: { href: pr.data.html_url, label: "PR 바로가기" },
+          });
+
+          const merge = await octokit.pulls.merge({
+            owner,
+            repo,
+            pull_number: pr.data.number,
+          });
+
+          mergeCommitSha = merge.data.sha ?? "";
+
+          streamLog({
+            title: "Pull Request 병합",
+            message: "새로운 테스트가 기본 브랜치에 병합되었습니다.",
+            level: "success",
+            details: [
+              { label: "병합 커밋", value: mergeCommitSha.substring(0, 7) },
+              { label: "기본 브랜치", value: snapshot.defaultBranch },
+            ],
+          });
+
+          streamResponse("running_tests");
+
+          const workflowRun = await waitForWorkflowRun({
+            octokit,
+            owner,
+            repo,
+            branch: snapshot.defaultBranch,
+            commitSha: mergeCommitSha,
+            onPoll: (status) => {
+              streamLog({
+                title: "워크플로우 모니터링",
+                message: status.message,
+                details: status.details,
+              });
+            },
+          });
+
+          streamLog({
+            title: "워크플로우 완료",
+            message: `테스트 워크플로우가 ${workflowRun.conclusion} 상태로 종료되었습니다.`,
+            level: workflowRun.conclusion === "success" ? "success" : "warning",
+            link: {
+              href: workflowRun.html_url,
+              label: "워크플로우 실행 보기",
+            },
+          });
+
+          streamResponse("reporting_results");
+
+          if (workflowRun.conclusion !== "success") {
+            const issue = await octokit.issues.create({
+              owner,
+              repo,
+              title: `E2E 테스트 실패 보고서 (${new Date().toISOString()})`,
+              body: buildFailureIssueBody({
+                repoUrl,
+                workflowUrl: workflowRun.html_url,
+                conclusion: workflowRun.conclusion,
+                commitSha: mergeCommitSha,
+                testFileName,
+              }),
+              labels: ["bug", "e2e-test-failure"],
+            });
+
+            streamLog({
+              title: "실패 리포트 생성",
+              message: "워크플로우 실패로 자동 이슈를 생성했습니다.",
+              level: "warning",
+              link: { href: issue.data.html_url, label: "이슈 보기" },
+            });
+
+            summary = {
+              workflowUrl: workflowRun.html_url,
+              status: workflowRun.conclusion ?? "unknown",
+              llm: { provider: "Google Gemini", model: MODEL_ID },
+              testFile: { path: `tests/${testFileName}`, branch: branchName },
+              testIntents,
+              scriptPreview: truncateCodeBlock(testScriptContent),
+              repoUrl,
+              issueUrl: issue.data.html_url,
+            };
+          } else {
+            summary = {
+              workflowUrl: workflowRun.html_url,
+              status: workflowRun.conclusion ?? "unknown",
+              llm: { provider: "Google Gemini", model: MODEL_ID },
+              testFile: { path: `tests/${testFileName}`, branch: branchName },
+              testIntents,
+              scriptPreview: truncateCodeBlock(testScriptContent),
+              repoUrl,
+            };
+          }
+
+          streamLog({
+            title: "자동화 결과 정리",
+            message: "세부 결과 리포트를 생성했습니다.",
+            level: "success",
+          });
+
+          if (summary) {
+            streamResult(summary);
+          }
         });
-        streamLog("결과 보고서 이슈 생성 완료.");
-
-        streamResult(issue.data.html_url);
       } catch (error) {
-        const errorMessage =
-          error instanceof Error
-            ? error.message
-            : "알 수 없는 오류가 발생했습니다.";
-        console.error("E2E 자동화 오류:", error);
-        streamError(errorMessage);
+        if (error instanceof Error) {
+          console.error("자동화 중단:", error.message);
+        }
       } finally {
-        // The controller is automatically closed when the stream is cancelled or errored.
+        closeStream();
       }
     },
   });
 
-  return new NextResponse(stream, {
+  return new Response(stream, {
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
@@ -269,29 +398,268 @@ jobs:
   });
 }
 
-async function getRepoContent(
+async function collectRepoSnapshot(
   octokit: Octokit,
   owner: string,
   repo: string,
-  path: string = "",
-): Promise<string> {
-  try {
-    const response = await octokit.repos.getContent({ owner, repo, path });
-    if (Array.isArray(response.data)) {
-      let content = "";
-      for (const file of response.data) {
-        if (file.type === "file") {
-          content += `\n--- File: ${file.path} ---\n`;
-          content += await getRepoContent(octokit, owner, repo, file.path);
-        }
+): Promise<RepoSnapshot> {
+  const repoMeta = await octokit.repos.get({ owner, repo });
+  const defaultBranch = repoMeta.data.default_branch;
+
+  const { data: tree } = await octokit.git.getTree({
+    owner,
+    repo,
+    tree_sha: defaultBranch,
+    recursive: "1",
+  });
+
+  const files = tree.tree
+    .filter((item) => item.type === "blob" && item.path)
+    .map((item) => item.path as string);
+
+  const importantCandidates = [
+    "package.json",
+    "playwright.config.ts",
+    "playwright.config.js",
+    "src/app/page.tsx",
+    "src/pages/index.tsx",
+    "src/pages/index.js",
+    "src/app/layout.tsx",
+  ];
+
+  const importantFiles: { path: string; snippet: string }[] = [];
+
+  for (const candidate of importantCandidates) {
+    if (!files.includes(candidate)) continue;
+    try {
+      const { data } = await octokit.repos.getContent({
+        owner,
+        repo,
+        path: candidate,
+      });
+      if ("content" in data && data.content) {
+        const decoded = Buffer.from(data.content, "base64").toString("utf-8");
+        importantFiles.push({
+          path: candidate,
+          snippet: decoded.substring(0, 1500),
+        });
       }
-      return content;
-    } else if (response.data.type === "file" && response.data.content) {
-      return Buffer.from(response.data.content, "base64").toString("utf-8");
+    } catch (error) {
+      console.warn(`중요 파일(${candidate})을 불러오지 못했습니다.`, error);
     }
-    return "";
-  } catch (error) {
-    console.error(`Error fetching repo content for path ${path}:`, error);
-    return "";
   }
+
+  const frameworks = detectFrameworks({ files, importantFiles });
+
+  const promptContext = [
+    `Repository: ${owner}/${repo}`,
+    `Default branch: ${defaultBranch}`,
+    `Total files (${files.length}): ${files.slice(0, 80).join(", ")}`,
+    ...importantFiles.map((file) => `\n--- ${file.path} ---\n${file.snippet}`),
+  ].join("\n\n");
+
+  return {
+    promptContext,
+    fileCount: files.length,
+    defaultBranch,
+    importantFiles,
+    frameworks,
+  };
+}
+
+function detectFrameworks({
+  files,
+  importantFiles,
+}: {
+  files: string[];
+  importantFiles: { path: string; snippet: string }[];
+}): string[] {
+  const hints: Set<string> = new Set();
+
+  if (files.some((file) => file.startsWith("src/app"))) {
+    hints.add("Next.js App Router");
+  }
+  if (files.some((file) => file.includes("playwright.config"))) {
+    hints.add("Playwright");
+  }
+  if (files.some((file) => file.endsWith(".tsx"))) {
+    hints.add("TypeScript");
+  }
+
+  const packageJson = importantFiles.find(
+    (file) => file.path === "package.json",
+  );
+  if (packageJson) {
+    if (/"next"\s*:\s*"/.test(packageJson.snippet)) {
+      hints.add("Next.js");
+    }
+    if (/"@playwright\/test"/.test(packageJson.snippet)) {
+      hints.add("Playwright Test");
+    }
+  }
+
+  return Array.from(hints);
+}
+
+function buildTestPrompt({
+  repoUrl,
+  owner,
+  repo,
+  snapshot,
+}: {
+  repoUrl: string;
+  owner: string;
+  repo: string;
+  snapshot: RepoSnapshot;
+}): string {
+  return `You are an expert QA engineer writing modern Playwright E2E tests for a Next.js project.
+
+Repository: ${owner}/${repo}
+Git URL: ${repoUrl}
+Detected frameworks: ${snapshot.frameworks.join(", ")}
+
+Write a single Playwright test file in TypeScript that validates the primary user journey of the application.
+
+Requirements:
+- Use the imported { test, expect } from "@playwright/test".
+- Cover the most critical end-to-end flow (landing page -> key action -> result validation).
+- Use accessible selectors (text, role, data-testid) where possible.
+- Add clear test titles and helpful inline comments describing the intent of each step.
+- Include waits only when necessary and prefer expect-based assertions.
+- Output only the TypeScript code for the test file.
+
+Repository context:
+${snapshot.promptContext.substring(0, 32000)}`;
+}
+
+function truncateCodeBlock(code: string, limit = 2000): string {
+  return code.length > limit ? `${code.substring(0, limit)}\n...` : code;
+}
+
+function extractTestIntents(script: string): string[] {
+  const intents: string[] = [];
+  const regex = /test(?:\.only|\.skip)?\((?:"|')(.*?)(?:"|')/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(script)) !== null) {
+    if (match[1]) {
+      intents.push(match[1]);
+    }
+  }
+  return intents.slice(0, 5);
+}
+
+function buildPullRequestBody({
+  repoUrl,
+  testFileName,
+  testIntents,
+  modelId,
+}: {
+  repoUrl: string;
+  testFileName: string;
+  testIntents: string[];
+  modelId: string;
+}): string {
+  const intentsList = testIntents.length
+    ? testIntents.map((intent) => `- ${intent}`).join("\n")
+    : "- 기본 사용자 여정을 검증하는 단일 테스트";
+
+  return `## 🤖 AI Generated Playwright Test
+
+- Source repository: ${repoUrl}
+- Model: ${modelId}
+- Test file: \`tests/${testFileName}\`
+
+### Covered scenarios
+${intentsList}
+
+Generated automatically to keep regression coverage up-to-date.`;
+}
+
+async function waitForWorkflowRun({
+  octokit,
+  owner,
+  repo,
+  branch,
+  commitSha,
+  onPoll,
+}: {
+  octokit: Octokit;
+  owner: string;
+  repo: string;
+  branch: string;
+  commitSha: string;
+  onPoll: (status: { message: string; details?: LogDetail[] }) => void;
+}) {
+  const start = Date.now();
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 10000));
+    const runs = await octokit.actions.listWorkflowRunsForRepo({
+      owner,
+      repo,
+      event: "push",
+      branch,
+    });
+
+    const workflowRun = runs.data.workflow_runs.find(
+      (run) => run.head_sha === commitSha,
+    );
+
+    if (workflowRun) {
+      if (workflowRun.status === "completed") {
+        const durationMs = Date.now() - start;
+        onPoll({
+          message: "워크플로우가 완료되었습니다.",
+          details: [
+            { label: "결과", value: workflowRun.conclusion ?? "unknown" },
+            {
+              label: "소요 시간",
+              value: `${Math.round(durationMs / 1000)}초`,
+            },
+          ],
+        });
+        return workflowRun;
+      }
+
+      onPoll({
+        message: "워크플로우가 실행 중입니다...",
+        details: [
+          { label: "현재 상태", value: workflowRun.status ?? "unknown" },
+          {
+            label: "대기열 위치",
+            value: workflowRun.run_number?.toString() ?? "-",
+          },
+        ],
+      });
+    } else {
+      onPoll({
+        message: "워크플로우 실행을 기다리는 중입니다...",
+      });
+    }
+  }
+
+  throw new Error("워크플로우 실행이 10분 내에 완료되지 않았습니다.");
+}
+
+function buildFailureIssueBody({
+  repoUrl,
+  workflowUrl,
+  conclusion,
+  commitSha,
+  testFileName,
+}: {
+  repoUrl: string;
+  workflowUrl: string;
+  conclusion: string | null;
+  commitSha: string;
+  testFileName: string;
+}): string {
+  return `## ❌ 자동화된 E2E 테스트 실패 보고서
+
+- 저장소: ${repoUrl}
+- 워크플로우 실행: ${workflowUrl}
+- 결과: ${conclusion}
+- 병합 커밋: \`${commitSha.substring(0, 7)}\`
+- 생성된 테스트: \`tests/${testFileName}\`
+
+워크플로우 로그를 참고하여 실패 원인을 확인해주세요.`;
 }
