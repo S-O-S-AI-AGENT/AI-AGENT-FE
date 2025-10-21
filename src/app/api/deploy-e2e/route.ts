@@ -972,6 +972,7 @@ async function waitForWorkflowRun({
   onPoll: (status: { message: string; details?: LogDetail[] }) => void;
 }) {
   const start = Date.now();
+  let lastSignature = "";
   for (let attempt = 0; attempt < 60; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 10000));
     const runs = await octokit.actions.listWorkflowRunsForRepo({
@@ -987,39 +988,196 @@ async function waitForWorkflowRun({
     );
 
     if (workflowRun) {
+      const runSignatureBase = `${workflowRun.status}|${
+        workflowRun.run_attempt ?? 0
+      }|${workflowRun.updated_at ?? ""}`;
+
+      const jobSummary =
+        workflowRun.status && workflowRun.status !== "queued"
+          ? await summarizeWorkflowJobs({
+              octokit,
+              owner,
+              repo,
+              runId: workflowRun.id,
+            })
+          : null;
+
       if (workflowRun.status === "completed") {
         const durationMs = Date.now() - start;
-        onPoll({
-          message: "워크플로우가 완료되었습니다.",
-          details: [
-            { label: "결과", value: workflowRun.conclusion ?? "unknown" },
-            {
-              label: "소요 시간",
-              value: `${Math.round(durationMs / 1000)}초`,
-            },
-          ],
-        });
+        const details: LogDetail[] = [
+          { label: "결과", value: workflowRun.conclusion ?? "unknown" },
+          {
+            label: "소요 시간",
+            value: `${Math.round(durationMs / 1000)}초`,
+          },
+        ];
+        if (jobSummary?.details.length) {
+          details.push(...jobSummary.details);
+        }
+        const signature = `${runSignatureBase}|completed|${
+          jobSummary?.signature ?? ""
+        }`;
+        if (signature !== lastSignature) {
+          onPoll({
+            message: "워크플로우가 완료되었습니다.",
+            details,
+          });
+          lastSignature = signature;
+        }
         return workflowRun;
       }
 
-      onPoll({
-        message: "워크플로우가 실행 중입니다...",
-        details: [
-          { label: "현재 상태", value: workflowRun.status ?? "unknown" },
-          {
-            label: "대기열 위치",
-            value: workflowRun.run_number?.toString() ?? "-",
-          },
-        ],
-      });
+      const statusLabel =
+        workflowRun.status === "queued"
+          ? "워크플로우가 대기열에 있습니다."
+          : "워크플로우 작업이 진행 중입니다.";
+
+      const details: LogDetail[] = [
+        { label: "현재 상태", value: workflowRun.status ?? "unknown" },
+      ];
+
+      if (workflowRun.run_attempt) {
+        details.push({
+          label: "실행 시도",
+          value: `${workflowRun.run_attempt}`,
+        });
+      }
+
+      if (workflowRun.created_at) {
+        details.push({
+          label: "생성 시각",
+          value: formatTimeForLog(workflowRun.created_at),
+        });
+      }
+
+      if (workflowRun.run_started_at) {
+        details.push({
+          label: "실행 시작",
+          value: formatTimeForLog(workflowRun.run_started_at),
+        });
+      }
+
+      if (jobSummary?.details.length) {
+        details.push(...jobSummary.details);
+      }
+
+      const signature = `${runSignatureBase}|${jobSummary?.signature ?? ""}`;
+      if (signature !== lastSignature) {
+        onPoll({
+          message: statusLabel,
+          details,
+        });
+        lastSignature = signature;
+      }
     } else {
-      onPoll({
-        message: "워크플로우 실행을 기다리는 중입니다...",
-      });
+      if (lastSignature !== "waiting") {
+        onPoll({
+          message: "워크플로우 실행을 기다리는 중입니다...",
+        });
+        lastSignature = "waiting";
+      }
     }
   }
 
   throw new Error("워크플로우 실행이 10분 내에 완료되지 않았습니다.");
+}
+
+type WorkflowJobsSummary = {
+  details: LogDetail[];
+  signature: string;
+};
+
+async function summarizeWorkflowJobs({
+  octokit,
+  owner,
+  repo,
+  runId,
+}: {
+  octokit: Octokit;
+  owner: string;
+  repo: string;
+  runId: number;
+}): Promise<WorkflowJobsSummary | null> {
+  try {
+    const { data } = await octokit.actions.listJobsForWorkflowRun({
+      owner,
+      repo,
+      run_id: runId,
+      per_page: 100,
+    });
+
+    const jobs = data.jobs ?? [];
+    if (!jobs.length) {
+      return null;
+    }
+
+    const completed = jobs.filter((job) => job.status === "completed");
+    const inProgress = jobs.filter((job) => job.status === "in_progress");
+    const queued = jobs.filter((job) => job.status === "queued");
+    const failing = jobs.find(
+      (job) => job.conclusion && job.conclusion !== "success",
+    );
+
+    let runningDescription = "";
+    if (inProgress.length) {
+      const job = inProgress[0];
+      const activeStep = job.steps?.find(
+        (step) => step.status === "in_progress",
+      );
+      runningDescription = activeStep
+        ? `${job.name} → ${activeStep.name}`
+        : job.name;
+    }
+
+    const details: LogDetail[] = [
+      {
+        label: "완료/총 작업",
+        value: `${completed.length}/${jobs.length}`,
+      },
+    ];
+
+    if (runningDescription) {
+      details.push({ label: "진행 중", value: runningDescription });
+    }
+
+    if (queued.length) {
+      const queuedNames = queued.map((job) => job.name).join(", ");
+      details.push({ label: "대기 중", value: queuedNames });
+    }
+
+    if (failing) {
+      details.push({
+        label: "문제 감지",
+        value: `${failing.name} (${failing.conclusion})`,
+      });
+    }
+
+    const signature = jobs
+      .map((job) => {
+        const stepSignature = (job.steps ?? [])
+          .map(
+            (step) => `${step.number}:${step.status}:${step.conclusion ?? ""}`,
+          )
+          .join("|");
+        return `${job.id}:${job.status}:${
+          job.conclusion ?? ""
+        }:${stepSignature}`;
+      })
+      .join(";");
+
+    return { details, signature };
+  } catch (error) {
+    console.error("워크플로우 작업 요약 실패:", error);
+    return null;
+  }
+}
+
+function formatTimeForLog(isoTime: string): string {
+  return new Date(isoTime).toLocaleTimeString("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
 function buildFailureIssueBody({
