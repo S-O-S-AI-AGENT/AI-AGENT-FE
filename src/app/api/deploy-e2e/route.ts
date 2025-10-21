@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { Octokit } from "@octokit/rest";
+import JSZip, { JSZipObject } from "jszip";
 
 type Step =
   | "analyzing"
@@ -41,6 +42,24 @@ type AutomationSummary = {
   repoUrl: string;
   issueUrl?: string;
   llmRawResponse?: string;
+  workflowLogs: WorkflowLogFile[];
+  workflowAnalysis?: WorkflowAnalysis;
+};
+
+type WorkflowLogFile = {
+  fileName: string;
+  content: string;
+  truncated: boolean;
+};
+
+type WorkflowAnalysis = {
+  statusOverview: string;
+  successRate: string;
+  rootCauses: string[];
+  resolutionSteps: string[];
+  risks: string[];
+  confidence: string;
+  fullReport: string;
 };
 
 interface RepoSnapshot {
@@ -137,6 +156,8 @@ export async function POST(request: NextRequest) {
         let branchName = "";
         let testFileName = "";
         let mergeCommitSha = "";
+        let workflowLogs: WorkflowLogFile[] = [];
+        let workflowAnalysis: WorkflowAnalysis | null = null;
 
         await safeRun(async () => {
           streamResponse("analyzing");
@@ -406,6 +427,91 @@ jobs:
 
           streamResponse("reporting_results");
 
+          try {
+            streamLog({
+              title: "워크플로우 로그 수집",
+              message: "GitHub Actions 실행 로그를 다운로드하고 있습니다.",
+            });
+
+            workflowLogs = await fetchWorkflowLogs({
+              octokit,
+              owner,
+              repo,
+              runId: workflowRun.id,
+            });
+
+            const sampleNames = workflowLogs
+              .slice(0, 3)
+              .map((log) => log.fileName)
+              .join(", ");
+
+            streamLog({
+              title: "워크플로우 로그 수집 완료",
+              message: `${workflowLogs.length}개의 로그 파일을 정리했습니다.`,
+              details: sampleNames
+                ? [{ label: "샘플", value: truncateText(sampleNames, 120) }]
+                : undefined,
+            });
+          } catch (logError) {
+            console.error("워크플로우 로그 수집 실패:", logError);
+            streamLog({
+              title: "워크플로우 로그 수집 실패",
+              message: "GitHub Actions 로그를 가져오지 못했습니다.",
+              level: "warning",
+            });
+          }
+
+          if (workflowLogs.length) {
+            try {
+              streamLog({
+                title: "로그 분석",
+                message:
+                  "AI가 실행 로그를 분석하고 현재 상태와 해결 방법을 정리합니다.",
+              });
+
+              workflowAnalysis = await analyzeWorkflowLogs({
+                genAI,
+                logs: workflowLogs,
+                workflowUrl: workflowRun.html_url,
+                repoUrl,
+                conclusion: workflowRun.conclusion ?? "unknown",
+              });
+
+              if (workflowAnalysis) {
+                const analysisDetails: LogDetail[] = [];
+                if (workflowAnalysis.statusOverview) {
+                  analysisDetails.push({
+                    label: "상태",
+                    value: truncateText(workflowAnalysis.statusOverview, 120),
+                  });
+                }
+                if (workflowAnalysis.successRate) {
+                  analysisDetails.push({
+                    label: "예상 성공률",
+                    value: workflowAnalysis.successRate,
+                  });
+                }
+
+                streamLog({
+                  title: "로그 분석 완료",
+                  message: "실행 상태와 해결 방법 리포트를 생성했습니다.",
+                  level: "success",
+                  details: analysisDetails.length ? analysisDetails : undefined,
+                });
+              }
+            } catch (analysisError) {
+              console.error("로그 분석 실패:", analysisError);
+              streamLog({
+                title: "로그 분석 실패",
+                message:
+                  analysisError instanceof Error
+                    ? analysisError.message
+                    : "LLM 분석 중 알 수 없는 오류가 발생했습니다.",
+                level: "warning",
+              });
+            }
+          }
+
           if (workflowRun.conclusion !== "success") {
             const issue = await octokit.issues.create({
               owner,
@@ -438,6 +544,8 @@ jobs:
               llmRawResponse: rawLLMResponse,
               repoUrl,
               issueUrl: issue.data.html_url,
+              workflowLogs,
+              workflowAnalysis: workflowAnalysis ?? undefined,
             };
           } else {
             summary = {
@@ -449,6 +557,8 @@ jobs:
               scriptPreview: truncateCodeBlock(testScriptContent),
               llmRawResponse: rawLLMResponse,
               repoUrl,
+              workflowLogs,
+              workflowAnalysis: workflowAnalysis ?? undefined,
             };
           }
 
@@ -481,6 +591,177 @@ jobs:
   });
 }
 
+const MAX_SINGLE_LOG_CHARS = 15000;
+const MAX_PROMPT_LOG_CHARS = 60000;
+
+async function fetchWorkflowLogs({
+  octokit,
+  owner,
+  repo,
+  runId,
+}: {
+  octokit: Octokit;
+  owner: string;
+  repo: string;
+  runId: number;
+}): Promise<WorkflowLogFile[]> {
+  const response = await octokit.actions.downloadWorkflowRunLogs({
+    owner,
+    repo,
+    run_id: runId,
+  });
+
+  const buffer = responseDataToBuffer(response.data);
+  const zip = await JSZip.loadAsync(buffer);
+  const logs: WorkflowLogFile[] = [];
+
+  const entries = Object.entries(zip.files) as [string, JSZipObject][];
+  for (const [fileName, file] of entries) {
+    if (!file || file.dir) continue;
+    if (!fileName.endsWith(".txt")) continue;
+
+    const rawContent = await file.async("string");
+    const normalized = rawContent.replace(/\r\n/g, "\n");
+    const truncated = normalized.length > MAX_SINGLE_LOG_CHARS;
+    const startIndex = truncated ? normalized.length - MAX_SINGLE_LOG_CHARS : 0;
+    const content = normalized.substring(startIndex);
+
+    logs.push({
+      fileName,
+      content,
+      truncated,
+    });
+  }
+
+  return logs.sort((a, b) => a.fileName.localeCompare(b.fileName));
+}
+
+async function analyzeWorkflowLogs({
+  genAI,
+  logs,
+  workflowUrl,
+  repoUrl,
+  conclusion,
+}: {
+  genAI: GoogleGenAI;
+  logs: WorkflowLogFile[];
+  workflowUrl: string;
+  repoUrl: string;
+  conclusion: string;
+}): Promise<WorkflowAnalysis | null> {
+  if (!logs.length) {
+    return null;
+  }
+
+  const logSnippet = combineLogsForPrompt(logs, MAX_PROMPT_LOG_CHARS);
+  const prompt = [
+    "너는 릴리스 엔지니어이자 품질 책임자이며, GitHub Actions 실행 로그를 기반으로 현재 상태를 정확하게 진단하고 해결 전략을 제시해야 한다.",
+    `저장소: ${repoUrl}`,
+    `워크플로우: ${workflowUrl}`,
+    `최종 결론: ${conclusion}`,
+    "아래의 로그를 분석하여 다음 정보를 모두 한국어로 정리하고, JSON 형태로만 응답하라.",
+    "필수 키: statusOverview (string), successRate (string, 백분율 포함), rootCauses (string[]), resolutionSteps (string[]), risks (string[]), confidence (string), fullReport (string). 불필요한 텍스트나 마크다운은 금지한다.",
+    logSnippet,
+  ].join("\n\n");
+
+  const result = await genAI.models.generateContent({
+    model: MODEL_ID,
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+  });
+
+  const parts = result.candidates?.[0]?.content?.parts ?? [];
+  let rawText = "";
+  for (const part of parts as Array<{ text?: string }>) {
+    if (typeof part.text === "string") {
+      rawText += part.text;
+    }
+  }
+  rawText = rawText.trim();
+
+  if (!rawText) {
+    return null;
+  }
+
+  const parsed = safeParseJson(rawText);
+  if (!parsed || typeof parsed !== "object") {
+    return null;
+  }
+
+  const data = parsed as Record<string, unknown>;
+
+  return {
+    statusOverview:
+      typeof data.statusOverview === "string" ? data.statusOverview : "",
+    successRate: typeof data.successRate === "string" ? data.successRate : "",
+    rootCauses: castStringArray(data.rootCauses),
+    resolutionSteps: castStringArray(data.resolutionSteps),
+    risks: castStringArray(data.risks),
+    confidence: typeof data.confidence === "string" ? data.confidence : "",
+    fullReport: typeof data.fullReport === "string" ? data.fullReport : rawText,
+  };
+}
+
+function combineLogsForPrompt(
+  logs: WorkflowLogFile[],
+  maxLength: number,
+): string {
+  const joined = logs
+    .map((log) => `### ${log.fileName}\n${log.content}`)
+    .join("\n\n");
+  if (joined.length <= maxLength) {
+    return joined;
+  }
+  return joined.substring(joined.length - maxLength);
+}
+
+function responseDataToBuffer(data: unknown): Buffer {
+  if (Buffer.isBuffer(data)) {
+    return data;
+  }
+  if (data instanceof ArrayBuffer) {
+    return Buffer.from(data);
+  }
+  if (ArrayBuffer.isView(data)) {
+    const view = data as ArrayBufferView;
+    return Buffer.from(view.buffer, view.byteOffset, view.byteLength);
+  }
+  if (typeof data === "string") {
+    return Buffer.from(data, "utf-8");
+  }
+  throw new Error("지원되지 않는 로그 응답 형식입니다.");
+}
+
+function safeParseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start >= 0 && end >= start) {
+      try {
+        return JSON.parse(text.substring(start, end + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+function castStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((item) => String(item));
+}
+
+function truncateText(value: string, maxLength = 120): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return `${value.substring(0, maxLength - 3)}...`;
+}
+
 async function collectRepoSnapshot(
   octokit: Octokit,
   owner: string,
@@ -496,9 +777,16 @@ async function collectRepoSnapshot(
     recursive: "1",
   });
 
-  const files = tree.tree
-    .filter((item) => item.type === "blob" && item.path)
-    .map((item) => item.path as string);
+  const treeNodes = tree.tree as Array<{
+    path?: string | null;
+    type?: string | null;
+  }>;
+  const files: string[] = [];
+  for (const node of treeNodes) {
+    if (node.type === "blob" && typeof node.path === "string") {
+      files.push(node.path);
+    }
+  }
 
   const importantCandidates = [
     "package.json",
@@ -684,6 +972,7 @@ async function waitForWorkflowRun({
   onPoll: (status: { message: string; details?: LogDetail[] }) => void;
 }) {
   const start = Date.now();
+  let lastSignature = "";
   for (let attempt = 0; attempt < 60; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 10000));
     const runs = await octokit.actions.listWorkflowRunsForRepo({
@@ -694,43 +983,201 @@ async function waitForWorkflowRun({
     });
 
     const workflowRun = runs.data.workflow_runs.find(
-      (run) => run.head_sha === commitSha,
+      (run: (typeof runs.data.workflow_runs)[number]) =>
+        run.head_sha === commitSha,
     );
 
     if (workflowRun) {
+      const runSignatureBase = `${workflowRun.status}|${
+        workflowRun.run_attempt ?? 0
+      }|${workflowRun.updated_at ?? ""}`;
+
+      const jobSummary =
+        workflowRun.status && workflowRun.status !== "queued"
+          ? await summarizeWorkflowJobs({
+              octokit,
+              owner,
+              repo,
+              runId: workflowRun.id,
+            })
+          : null;
+
       if (workflowRun.status === "completed") {
         const durationMs = Date.now() - start;
-        onPoll({
-          message: "워크플로우가 완료되었습니다.",
-          details: [
-            { label: "결과", value: workflowRun.conclusion ?? "unknown" },
-            {
-              label: "소요 시간",
-              value: `${Math.round(durationMs / 1000)}초`,
-            },
-          ],
-        });
+        const details: LogDetail[] = [
+          { label: "결과", value: workflowRun.conclusion ?? "unknown" },
+          {
+            label: "소요 시간",
+            value: `${Math.round(durationMs / 1000)}초`,
+          },
+        ];
+        if (jobSummary?.details.length) {
+          details.push(...jobSummary.details);
+        }
+        const signature = `${runSignatureBase}|completed|${
+          jobSummary?.signature ?? ""
+        }`;
+        if (signature !== lastSignature) {
+          onPoll({
+            message: "워크플로우가 완료되었습니다.",
+            details,
+          });
+          lastSignature = signature;
+        }
         return workflowRun;
       }
 
-      onPoll({
-        message: "워크플로우가 실행 중입니다...",
-        details: [
-          { label: "현재 상태", value: workflowRun.status ?? "unknown" },
-          {
-            label: "대기열 위치",
-            value: workflowRun.run_number?.toString() ?? "-",
-          },
-        ],
-      });
+      const statusLabel =
+        workflowRun.status === "queued"
+          ? "워크플로우가 대기열에 있습니다."
+          : "워크플로우 작업이 진행 중입니다.";
+
+      const details: LogDetail[] = [
+        { label: "현재 상태", value: workflowRun.status ?? "unknown" },
+      ];
+
+      if (workflowRun.run_attempt) {
+        details.push({
+          label: "실행 시도",
+          value: `${workflowRun.run_attempt}`,
+        });
+      }
+
+      if (workflowRun.created_at) {
+        details.push({
+          label: "생성 시각",
+          value: formatTimeForLog(workflowRun.created_at),
+        });
+      }
+
+      if (workflowRun.run_started_at) {
+        details.push({
+          label: "실행 시작",
+          value: formatTimeForLog(workflowRun.run_started_at),
+        });
+      }
+
+      if (jobSummary?.details.length) {
+        details.push(...jobSummary.details);
+      }
+
+      const signature = `${runSignatureBase}|${jobSummary?.signature ?? ""}`;
+      if (signature !== lastSignature) {
+        onPoll({
+          message: statusLabel,
+          details,
+        });
+        lastSignature = signature;
+      }
     } else {
-      onPoll({
-        message: "워크플로우 실행을 기다리는 중입니다...",
-      });
+      if (lastSignature !== "waiting") {
+        onPoll({
+          message: "워크플로우 실행을 기다리는 중입니다...",
+        });
+        lastSignature = "waiting";
+      }
     }
   }
 
   throw new Error("워크플로우 실행이 10분 내에 완료되지 않았습니다.");
+}
+
+type WorkflowJobsSummary = {
+  details: LogDetail[];
+  signature: string;
+};
+
+async function summarizeWorkflowJobs({
+  octokit,
+  owner,
+  repo,
+  runId,
+}: {
+  octokit: Octokit;
+  owner: string;
+  repo: string;
+  runId: number;
+}): Promise<WorkflowJobsSummary | null> {
+  try {
+    const { data } = await octokit.actions.listJobsForWorkflowRun({
+      owner,
+      repo,
+      run_id: runId,
+      per_page: 100,
+    });
+
+    const jobs = data.jobs ?? [];
+    if (!jobs.length) {
+      return null;
+    }
+
+    const completed = jobs.filter((job) => job.status === "completed");
+    const inProgress = jobs.filter((job) => job.status === "in_progress");
+    const queued = jobs.filter((job) => job.status === "queued");
+    const failing = jobs.find(
+      (job) => job.conclusion && job.conclusion !== "success",
+    );
+
+    let runningDescription = "";
+    if (inProgress.length) {
+      const job = inProgress[0];
+      const activeStep = job.steps?.find(
+        (step) => step.status === "in_progress",
+      );
+      runningDescription = activeStep
+        ? `${job.name} → ${activeStep.name}`
+        : job.name;
+    }
+
+    const details: LogDetail[] = [
+      {
+        label: "완료/총 작업",
+        value: `${completed.length}/${jobs.length}`,
+      },
+    ];
+
+    if (runningDescription) {
+      details.push({ label: "진행 중", value: runningDescription });
+    }
+
+    if (queued.length) {
+      const queuedNames = queued.map((job) => job.name).join(", ");
+      details.push({ label: "대기 중", value: queuedNames });
+    }
+
+    if (failing) {
+      details.push({
+        label: "문제 감지",
+        value: `${failing.name} (${failing.conclusion})`,
+      });
+    }
+
+    const signature = jobs
+      .map((job) => {
+        const stepSignature = (job.steps ?? [])
+          .map(
+            (step) => `${step.number}:${step.status}:${step.conclusion ?? ""}`,
+          )
+          .join("|");
+        return `${job.id}:${job.status}:${
+          job.conclusion ?? ""
+        }:${stepSignature}`;
+      })
+      .join(";");
+
+    return { details, signature };
+  } catch (error) {
+    console.error("워크플로우 작업 요약 실패:", error);
+    return null;
+  }
+}
+
+function formatTimeForLog(isoTime: string): string {
+  return new Date(isoTime).toLocaleTimeString("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
 function buildFailureIssueBody({

@@ -37,6 +37,22 @@ interface LogEntry {
   isExpanded?: boolean;
 }
 
+interface WorkflowLogFile {
+  fileName: string;
+  content: string;
+  truncated: boolean;
+}
+
+interface WorkflowAnalysis {
+  statusOverview: string;
+  successRate: string;
+  rootCauses: string[];
+  resolutionSteps: string[];
+  risks: string[];
+  confidence: string;
+  fullReport: string;
+}
+
 interface ReportData {
   workflowUrl: string;
   status: string;
@@ -46,7 +62,11 @@ interface ReportData {
   scriptPreview: string;
   repoUrl: string;
   issueUrl?: string;
+  workflowLogs: WorkflowLogFile[];
+  workflowAnalysis?: WorkflowAnalysis;
 }
+
+const MAX_LOG_CHARACTERS = 15000;
 
 const automationSteps: { id: Step; name: string }[] = [
   { id: "idle", name: "대기" },
@@ -154,26 +174,37 @@ const createErrorLog = (message: string): LogEntry => ({
   timestamp: new Date().toISOString(),
 });
 
-const createResultLog = (summary: ReportData): LogEntry => ({
-  id: generateLogId(),
-  level: summary.status === "success" ? "success" : "warning",
-  title: "자동화 완료",
-  message:
-    summary.status === "success"
-      ? "자동화가 성공적으로 완료되었습니다."
-      : "자동화는 완료되었지만 경고 사항이 있습니다.",
-  details: [
+const createResultLog = (summary: ReportData): LogEntry => {
+  const details: LogDetail[] = [
     { label: "LLM", value: `${summary.llm.provider} (${summary.llm.model})` },
     { label: "테스트 파일", value: summary.testFile.path },
     { label: "브랜치", value: summary.testFile.branch },
     { label: "결과", value: summary.status },
-  ],
-  link: {
-    href: summary.workflowUrl,
-    label: "워크플로우 결과 보기",
-  },
-  timestamp: new Date().toISOString(),
-});
+  ];
+
+  if (summary.workflowAnalysis?.successRate) {
+    details.push({
+      label: "예상 성공률",
+      value: summary.workflowAnalysis.successRate,
+    });
+  }
+
+  return {
+    id: generateLogId(),
+    level: summary.status === "success" ? "success" : "warning",
+    title: "자동화 완료",
+    message:
+      summary.status === "success"
+        ? "자동화가 성공적으로 완료되었습니다."
+        : "자동화는 완료되었지만 경고 사항이 있습니다.",
+    details,
+    link: {
+      href: summary.workflowUrl,
+      label: "워크플로우 결과 보기",
+    },
+    timestamp: new Date().toISOString(),
+  };
+};
 
 const formatTimestamp = (iso: string) =>
   new Date(iso).toLocaleTimeString("ko-KR", {
@@ -795,6 +826,222 @@ export default function E2ETesterPage() {
                           <li key={`${intent}-${index}`}>{intent}</li>
                         ))}
                       </ol>
+                    </div>
+                  )}
+
+                  {report.workflowAnalysis && (
+                    <div
+                      className={cn(
+                        "mt-6 rounded-2xl border p-4 text-sm",
+                        isDarkMode
+                          ? "border-slate-800 bg-slate-900/60"
+                          : "border-slate-200/60 bg-slate-50/80",
+                      )}
+                    >
+                      <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <h4
+                          className={cn(
+                            "text-xs font-bold uppercase tracking-wide",
+                            isDarkMode ? "text-slate-400" : "text-slate-600",
+                          )}
+                        >
+                          로그 기반 AI 분석
+                        </h4>
+                        <div className="flex flex-wrap gap-2 text-xs font-semibold">
+                          {report.workflowAnalysis.successRate && (
+                            <span
+                              className={cn(
+                                "inline-flex items-center rounded-full border px-3 py-1",
+                                isDarkMode
+                                  ? "border-emerald-500/40 text-emerald-200"
+                                  : "border-emerald-200 text-emerald-600",
+                              )}
+                            >
+                              성공률 {report.workflowAnalysis.successRate}
+                            </span>
+                          )}
+                          {report.workflowAnalysis.confidence && (
+                            <span
+                              className={cn(
+                                "inline-flex items-center rounded-full border px-3 py-1",
+                                isDarkMode
+                                  ? "border-indigo-500/40 text-indigo-200"
+                                  : "border-indigo-200 text-indigo-600",
+                              )}
+                            >
+                              신뢰도 {report.workflowAnalysis.confidence}
+                            </span>
+                          )}
+                        </div>
+                      </header>
+
+                      {report.workflowAnalysis.statusOverview && (
+                        <p
+                          className={cn(
+                            "mt-4 text-base font-semibold",
+                            isDarkMode ? "text-slate-100" : "text-slate-900",
+                          )}
+                        >
+                          {report.workflowAnalysis.statusOverview}
+                        </p>
+                      )}
+
+                      <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                        {report.workflowAnalysis.rootCauses.length > 0 && (
+                          <div
+                            className={cn(
+                              "rounded-xl p-4",
+                              isDarkMode
+                                ? "bg-rose-950/40 text-rose-200"
+                                : "bg-rose-50 text-rose-700",
+                            )}
+                          >
+                            <h5 className="text-xs font-bold uppercase tracking-wide">
+                              원인 분석
+                            </h5>
+                            <ul className="mt-2 space-y-1 pl-4 text-sm list-disc">
+                              {report.workflowAnalysis.rootCauses.map(
+                                (cause, index) => (
+                                  <li key={`cause-${index}`}>{cause}</li>
+                                ),
+                              )}
+                            </ul>
+                          </div>
+                        )}
+
+                        {report.workflowAnalysis.resolutionSteps.length > 0 && (
+                          <div
+                            className={cn(
+                              "rounded-xl p-4",
+                              isDarkMode
+                                ? "bg-emerald-950/40 text-emerald-200"
+                                : "bg-emerald-50 text-emerald-700",
+                            )}
+                          >
+                            <h5 className="text-xs font-bold uppercase tracking-wide">
+                              해결 방법
+                            </h5>
+                            <ol className="mt-2 list-decimal space-y-1 pl-4 text-sm">
+                              {report.workflowAnalysis.resolutionSteps.map(
+                                (stepItem, index) => (
+                                  <li key={`resolution-${index}`}>
+                                    {stepItem}
+                                  </li>
+                                ),
+                              )}
+                            </ol>
+                          </div>
+                        )}
+
+                        {report.workflowAnalysis.risks.length > 0 && (
+                          <div
+                            className={cn(
+                              "rounded-xl p-4",
+                              isDarkMode
+                                ? "bg-amber-950/40 text-amber-200"
+                                : "bg-amber-50 text-amber-700",
+                            )}
+                          >
+                            <h5 className="text-xs font-bold uppercase tracking-wide">
+                              남은 리스크
+                            </h5>
+                            <ul className="mt-2 space-y-1 pl-4 text-sm list-disc">
+                              {report.workflowAnalysis.risks.map(
+                                (risk, index) => (
+                                  <li key={`risk-${index}`}>{risk}</li>
+                                ),
+                              )}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+
+                      {report.workflowAnalysis.fullReport && (
+                        <div
+                          className={cn(
+                            "mt-4 rounded-xl border p-4 text-sm",
+                            isDarkMode
+                              ? "border-slate-800/70 bg-slate-900/60"
+                              : "border-slate-200/60 bg-white",
+                          )}
+                        >
+                          <h5 className="text-xs font-bold uppercase tracking-wide">
+                            상세 보고서
+                          </h5>
+                          <p className="mt-2 whitespace-pre-wrap leading-relaxed">
+                            {report.workflowAnalysis.fullReport}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {report.workflowLogs.length > 0 && (
+                    <div
+                      className={cn(
+                        "mt-6 rounded-2xl border p-4 text-sm",
+                        isDarkMode
+                          ? "border-slate-800 bg-slate-900/60"
+                          : "border-slate-200/60 bg-slate-50/80",
+                      )}
+                    >
+                      <h4
+                        className={cn(
+                          "text-xs font-bold uppercase tracking-wide",
+                          isDarkMode ? "text-slate-400" : "text-slate-600",
+                        )}
+                      >
+                        GitHub Actions 세부 로그
+                      </h4>
+                      <div className="mt-3 space-y-2">
+                        {report.workflowLogs.map((logFile) => (
+                          <details
+                            key={logFile.fileName}
+                            className={cn(
+                              "group rounded-xl border",
+                              isDarkMode
+                                ? "border-slate-800 bg-slate-950/50"
+                                : "border-slate-200 bg-white",
+                            )}
+                          >
+                            <summary
+                              className={cn(
+                                "flex cursor-pointer items-center justify-between gap-3 px-4 py-2 text-sm font-semibold",
+                                isDarkMode
+                                  ? "text-slate-200"
+                                  : "text-slate-800",
+                              )}
+                            >
+                              <span className="truncate">
+                                {logFile.fileName}
+                              </span>
+                              {logFile.truncated && (
+                                <span
+                                  className={cn(
+                                    "text-xs",
+                                    isDarkMode
+                                      ? "text-amber-300"
+                                      : "text-amber-600",
+                                  )}
+                                >
+                                  (마지막 {MAX_LOG_CHARACTERS.toLocaleString()}
+                                  자만 표시)
+                                </span>
+                              )}
+                            </summary>
+                            <pre
+                              className={cn(
+                                "max-h-72 overflow-y-auto px-4 py-3 text-xs leading-relaxed",
+                                isDarkMode
+                                  ? "bg-slate-950 text-slate-200"
+                                  : "bg-slate-100 text-slate-800",
+                              )}
+                            >
+                              <code>{logFile.content}</code>
+                            </pre>
+                          </details>
+                        ))}
+                      </div>
                     </div>
                   )}
 

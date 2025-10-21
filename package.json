@@ -24,6 +24,7 @@
     "@radix-ui/react-dialog": "^1.1.1",
     "@radix-ui/react-select": "^2.0.0",
     "@radix-ui/react-tabs": "^1.0.4",
+    "jszip": "^3.10.1",
     "clsx": "^2.1.1",
     "mime": "^4.1.0",
     "monaco-editor": "^0.44.0",
@@ -35,6 +36,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@types/jszip": "^3.4.1",
     "@playwright/test": "^1.40.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20.19.22",
