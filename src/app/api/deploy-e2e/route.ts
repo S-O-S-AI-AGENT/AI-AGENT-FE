@@ -300,8 +300,6 @@ export async function POST(request: NextRequest) {
           )}
 
 on:
-  push:
-    branches: [${branchName}]
   pull_request:
     branches: [${snapshot.defaultBranch}]
   workflow_dispatch:
@@ -365,9 +363,34 @@ jobs:
             level: "success",
             details: [
               { label: "워크플로우", value: workflowFileName },
-              { label: "트리거", value: "Push, PR, Manual" },
+              { label: "트리거", value: "PR, Manual" },
             ],
           });
+
+          try {
+            await octokit.actions.createWorkflowDispatch({
+              owner,
+              repo,
+              workflow_id: workflowFileName,
+              ref: branchName,
+            });
+
+            streamLog({
+              title: "워크플로우 실행 요청",
+              message:
+                "workflow_dispatch 이벤트로 테스트 워크플로우 실행을 요청했습니다.",
+            });
+          } catch (dispatchError) {
+            console.error("워크플로우 실행 요청 실패:", dispatchError);
+            streamLog({
+              title: "워크플로우 실행 요청 실패",
+              message:
+                dispatchError instanceof Error
+                  ? dispatchError.message
+                  : "workflow_dispatch 호출 중 오류가 발생했습니다.",
+              level: "warning",
+            });
+          }
 
           const pr = await octokit.pulls.create({
             owner,
@@ -978,8 +1001,8 @@ async function waitForWorkflowRun({
     const runs = await octokit.actions.listWorkflowRunsForRepo({
       owner,
       repo,
-      event: "push",
       branch,
+      per_page: 50,
     });
 
     const workflowRun = runs.data.workflow_runs.find(
@@ -1032,28 +1055,17 @@ async function waitForWorkflowRun({
           ? "워크플로우가 대기열에 있습니다."
           : "워크플로우 작업이 진행 중입니다.";
 
-      const details: LogDetail[] = [
-        { label: "현재 상태", value: workflowRun.status ?? "unknown" },
-      ];
+      const details: LogDetail[] = [];
+
+      details.push({
+        label: "현재 상태",
+        value: workflowRun.status ?? "unknown",
+      });
 
       if (workflowRun.run_attempt) {
         details.push({
           label: "실행 시도",
           value: `${workflowRun.run_attempt}`,
-        });
-      }
-
-      if (workflowRun.created_at) {
-        details.push({
-          label: "생성 시각",
-          value: formatTimeForLog(workflowRun.created_at),
-        });
-      }
-
-      if (workflowRun.run_started_at) {
-        details.push({
-          label: "실행 시작",
-          value: formatTimeForLog(workflowRun.run_started_at),
         });
       }
 
@@ -1111,7 +1123,6 @@ async function summarizeWorkflowJobs({
       return null;
     }
 
-    const completed = jobs.filter((job) => job.status === "completed");
     const inProgress = jobs.filter((job) => job.status === "in_progress");
     const queued = jobs.filter((job) => job.status === "queued");
     const failing = jobs.find(
@@ -1129,12 +1140,7 @@ async function summarizeWorkflowJobs({
         : job.name;
     }
 
-    const details: LogDetail[] = [
-      {
-        label: "완료/총 작업",
-        value: `${completed.length}/${jobs.length}`,
-      },
-    ];
+    const details: LogDetail[] = [];
 
     if (runningDescription) {
       details.push({ label: "진행 중", value: runningDescription });
@@ -1170,14 +1176,6 @@ async function summarizeWorkflowJobs({
     console.error("워크플로우 작업 요약 실패:", error);
     return null;
   }
-}
-
-function formatTimeForLog(isoTime: string): string {
-  return new Date(isoTime).toLocaleTimeString("ko-KR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
 }
 
 function buildFailureIssueBody({
