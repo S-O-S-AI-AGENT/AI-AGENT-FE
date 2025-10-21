@@ -68,6 +68,14 @@ interface ReportData {
 
 const MAX_LOG_CHARACTERS = 15000;
 
+interface SavedConfig {
+  id: string;
+  repoUrl: string;
+  includeToken: boolean;
+  token?: string;
+  createdAt: string;
+}
+
 const automationSteps: { id: Step; name: string }[] = [
   { id: "idle", name: "대기" },
   { id: "analyzing", name: "저장소 분석" },
@@ -221,6 +229,8 @@ export default function E2ETesterPage() {
   const [report, setReport] = useState<ReportData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [savedConfigs, setSavedConfigs] = useState<SavedConfig[]>([]);
+  const [rememberToken, setRememberToken] = useState(false);
   const logContainerRef = useRef<HTMLDivElement>(null);
 
   const toggleLogExpanded = (logId: string) => {
@@ -243,11 +253,124 @@ export default function E2ETesterPage() {
     if (saved) {
       setIsDarkMode(JSON.parse(saved));
     }
-    const token = localStorage.getItem("github_token");
-    if (token) {
-      setGithubToken(token);
+    const savedRepoUrl = localStorage.getItem("e2e-tester-repo-url");
+    if (savedRepoUrl) {
+      setRepoUrl(savedRepoUrl);
+    }
+    const shouldRemember = localStorage.getItem("e2e-tester-remember-token");
+    if (shouldRemember) {
+      setRememberToken(shouldRemember === "true");
+    }
+    const savedToken = localStorage.getItem("e2e-tester-token");
+    if (savedToken && shouldRemember === "true") {
+      setGithubToken(savedToken);
+    }
+    const storedConfigs = localStorage.getItem("e2e-tester-configs");
+    if (storedConfigs) {
+      try {
+        const parsed: SavedConfig[] = JSON.parse(storedConfigs);
+        setSavedConfigs(parsed);
+      } catch (error) {
+        console.warn("저장된 설정을 불러오는 중 오류가 발생했습니다.", error);
+      }
     }
   }, []);
+
+  useEffect(() => {
+    if (!repoUrl) {
+      localStorage.removeItem("e2e-tester-repo-url");
+      return;
+    }
+    localStorage.setItem("e2e-tester-repo-url", repoUrl);
+  }, [repoUrl]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      return;
+    }
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [isLoading]);
+
+  useEffect(() => {
+    localStorage.setItem("e2e-tester-remember-token", rememberToken.toString());
+    if (!rememberToken) {
+      localStorage.removeItem("e2e-tester-token");
+      setSavedConfigs((prev) => {
+        let changed = false;
+        const next = prev.map((config) => {
+          if (!config.includeToken) {
+            return config;
+          }
+          changed = true;
+          return { ...config, includeToken: false, token: undefined };
+        });
+        return changed ? next : prev;
+      });
+      return;
+    }
+    if (githubToken) {
+      localStorage.setItem("e2e-tester-token", githubToken);
+    }
+  }, [rememberToken, githubToken]);
+
+  useEffect(() => {
+    localStorage.setItem("e2e-tester-configs", JSON.stringify(savedConfigs));
+  }, [savedConfigs]);
+
+  const upsertSavedConfig = (config: SavedConfig) => {
+    setSavedConfigs((prev) => {
+      const existingIndex = prev.findIndex(
+        (item) => item.repoUrl === config.repoUrl,
+      );
+      if (existingIndex >= 0) {
+        const next = [...prev];
+        next[existingIndex] = config;
+        return next;
+      }
+      return [config, ...prev].slice(0, 5);
+    });
+  };
+
+  const handleSaveConfig = () => {
+    if (!repoUrl) {
+      return;
+    }
+    const newConfig: SavedConfig = {
+      id:
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `config-${Date.now().toString(36)}`,
+      repoUrl,
+      includeToken: rememberToken && Boolean(githubToken),
+      token: rememberToken ? githubToken : undefined,
+      createdAt: new Date().toISOString(),
+    };
+    upsertSavedConfig(newConfig);
+  };
+
+  const handleApplyConfig = (config: SavedConfig) => {
+    setRepoUrl(config.repoUrl);
+    if (config.includeToken && config.token) {
+      setGithubToken(config.token);
+      setRememberToken(true);
+    } else {
+      setGithubToken("");
+    }
+  };
+
+  const handleDeleteConfig = (id: string) => {
+    setSavedConfigs((prev) => prev.filter((config) => config.id !== id));
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -429,6 +552,25 @@ export default function E2ETesterPage() {
                   onChange={(e) => setGithubToken(e.target.value)}
                   placeholder="ghp_..."
                 />
+                <label
+                  className={cn(
+                    "mt-3 flex items-center gap-2 text-sm font-medium",
+                    isDarkMode ? "text-slate-300" : "text-black",
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    className={cn(
+                      "h-4 w-4 rounded border",
+                      isDarkMode
+                        ? "border-slate-600 bg-slate-900"
+                        : "border-slate-300 bg-white",
+                    )}
+                    checked={rememberToken}
+                    onChange={(event) => setRememberToken(event.target.checked)}
+                  />
+                  토큰 저장 허용 (개인 기기에서만 사용하세요)
+                </label>
                 <p
                   className={cn(
                     "mt-2 text-sm font-medium",
@@ -436,10 +578,138 @@ export default function E2ETesterPage() {
                   )}
                 >
                   비공개 저장소 분석 또는 이슈 생성을 위해 토큰이 필요할 수
-                  있습니다. 토큰은 로컬 스토리지에 저장되지 않으며, 브라우저
-                  메모리에서만 사용됩니다.
+                  있습니다. 기본적으로는 저장되지 않으며, 위 옵션을 선택하면
+                  현재 브라우저 로컬 스토리지에 암호화 없이 보관됩니다.
                 </p>
               </div>
+            </div>
+
+            <div
+              className={cn(
+                "rounded-3xl border p-4",
+                isDarkMode
+                  ? "border-slate-800 bg-slate-900/70"
+                  : "border-slate-200 bg-slate-50/80",
+              )}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3
+                    className={cn(
+                      "text-sm font-bold",
+                      isDarkMode ? "text-slate-100" : "text-black",
+                    )}
+                  >
+                    저장된 설정
+                  </h3>
+                  <p
+                    className={cn(
+                      "text-xs font-medium",
+                      isDarkMode ? "text-slate-400" : "text-slate-600",
+                    )}
+                  >
+                    자주 사용하는 저장소 정보를 저장해 두고 빠르게 불러올 수
+                    있습니다.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveConfig}
+                  disabled={!repoUrl}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold shadow-sm transition",
+                    isDarkMode
+                      ? "bg-indigo-500/20 text-indigo-200 hover:bg-indigo-500/30 disabled:bg-slate-800 disabled:text-slate-500"
+                      : "bg-indigo-100 text-indigo-600 hover:bg-indigo-200 disabled:bg-slate-100 disabled:text-slate-400",
+                  )}
+                >
+                  <Icons.Save className="h-4 w-4" /> 현재 입력 저장
+                </button>
+              </div>
+
+              {savedConfigs.length === 0 ? (
+                <p
+                  className={cn(
+                    "mt-4 text-sm",
+                    isDarkMode ? "text-slate-500" : "text-slate-600",
+                  )}
+                >
+                  아직 저장된 설정이 없습니다.
+                </p>
+              ) : (
+                <ul className="mt-4 space-y-3">
+                  {savedConfigs.map((config) => {
+                    const created = new Date(config.createdAt).toLocaleString(
+                      "ko-KR",
+                      {
+                        hour12: false,
+                      },
+                    );
+                    return (
+                      <li
+                        key={config.id}
+                        className={cn(
+                          "flex flex-col gap-3 rounded-2xl border p-3 text-sm sm:flex-row sm:items-center sm:justify-between",
+                          isDarkMode
+                            ? "border-slate-800 bg-slate-950/40"
+                            : "border-slate-200 bg-white",
+                        )}
+                      >
+                        <div className="space-y-1">
+                          <p className="font-semibold">{config.repoUrl}</p>
+                          <p
+                            className={cn(
+                              "text-xs font-medium",
+                              isDarkMode ? "text-slate-500" : "text-slate-600",
+                            )}
+                          >
+                            저장 시각: {created}
+                          </p>
+                          {config.includeToken && (
+                            <p
+                              className={cn(
+                                "text-xs font-medium",
+                                isDarkMode
+                                  ? "text-amber-300"
+                                  : "text-amber-600",
+                              )}
+                            >
+                              토큰 포함 저장됨
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleApplyConfig(config)}
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition",
+                              isDarkMode
+                                ? "bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30"
+                                : "bg-emerald-100 text-emerald-600 hover:bg-emerald-200",
+                            )}
+                          >
+                            <Icons.ArrowRight className="h-3.5 w-3.5" />{" "}
+                            불러오기
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteConfig(config.id)}
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition",
+                              isDarkMode
+                                ? "bg-rose-500/20 text-rose-200 hover:bg-rose-500/30"
+                                : "bg-rose-100 text-rose-600 hover:bg-rose-200",
+                            )}
+                          >
+                            <Icons.Trash className="h-3.5 w-3.5" /> 삭제
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
 
             <button
