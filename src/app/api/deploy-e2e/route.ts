@@ -68,6 +68,7 @@ interface RepoSnapshot {
   defaultBranch: string;
   importantFiles: { path: string; snippet: string }[];
   frameworks: string[];
+  referenceCandidates: { category: string; files: string[] }[];
 }
 
 const MODEL_ID = "gemini-2.5-pro";
@@ -186,8 +187,47 @@ export async function POST(request: NextRequest) {
                   .map((file) => file.path)
                   .join(", "),
               },
+              {
+                label: "참조 파일 수",
+                value: snapshot.importantFiles.length.toString(),
+              },
             ],
           });
+
+          if (snapshot.referenceCandidates.length) {
+            streamLog({
+              title: "참조 후보 파일",
+              message: "LLM이 선택할 수 있도록 주요 후보 파일을 정리했습니다.",
+              details: snapshot.referenceCandidates.map((group) => {
+                const displayList = group.files.slice(0, 8).join(", ");
+                const remaining = group.files.length - 8;
+                const value =
+                  remaining > 0
+                    ? `${displayList} 외 ${remaining.toLocaleString()}개`
+                    : displayList;
+                return {
+                  label: group.category,
+                  value: value || "-",
+                };
+              }),
+            });
+          }
+
+          if (snapshot.importantFiles.length) {
+            const snippetPreview = snapshot.importantFiles
+              .map((file) => {
+                const truncated = truncateText(file.snippet, 1200);
+                return `// ${file.path}\n${truncated}`;
+              })
+              .join("\n\n");
+
+            streamLog({
+              title: "프롬프트 참고 코드",
+              message: "LLM에 전달되는 대표 코드 스니펫입니다.",
+              level: "info",
+              codeBlock: snippetPreview,
+            });
+          }
 
           streamResponse("generating_test_script");
 
@@ -196,6 +236,13 @@ export async function POST(request: NextRequest) {
             owner,
             repo,
             snapshot,
+          });
+
+          streamLog({
+            title: "LLM 프롬프트",
+            message: "Gemini에 전달되는 최종 프롬프트입니다.",
+            level: "info",
+            codeBlock: truncateText(prompt, 6000),
           });
 
           streamLog({
@@ -811,20 +858,75 @@ async function collectRepoSnapshot(
     }
   }
 
-  const importantCandidates = [
+  const importantFiles: { path: string; snippet: string }[] = [];
+
+  const staticCandidates = [
     "package.json",
     "playwright.config.ts",
     "playwright.config.js",
+    "src/app/layout.tsx",
     "src/app/page.tsx",
     "src/pages/index.tsx",
     "src/pages/index.js",
-    "src/app/layout.tsx",
   ];
 
-  const importantFiles: { path: string; snippet: string }[] = [];
+  const pageCandidates = files
+    .filter(
+      (path) =>
+        path.startsWith("src/app/") &&
+        path.endsWith("/page.tsx") &&
+        path !== "src/app/page.tsx",
+    )
+    .sort((a, b) => a.localeCompare(b));
 
-  for (const candidate of importantCandidates) {
+  const componentCandidates = files
+    .filter(
+      (path) => path.startsWith("src/components/") && path.endsWith(".tsx"),
+    )
+    .sort((a, b) => a.localeCompare(b));
+
+  const apiRouteCandidates = files
+    .filter(
+      (path) => path.startsWith("src/app/api/") && path.endsWith("/route.ts"),
+    )
+    .sort((a, b) => a.localeCompare(b));
+
+  const referenceCandidates = [
+    {
+      category: "핵심 설정",
+      files: staticCandidates.filter((candidate) => files.includes(candidate)),
+    },
+    {
+      category: "페이지",
+      files: pageCandidates.slice(0, 20),
+    },
+    {
+      category: "컴포넌트",
+      files: componentCandidates.slice(0, 15),
+    },
+    {
+      category: "API 라우트",
+      files: apiRouteCandidates.slice(0, 15),
+    },
+  ].filter((group) => group.files.length > 0);
+
+  const candidateOrder = referenceCandidates
+    .flatMap((group) => group.files)
+    .filter((path, index, arr) => arr.indexOf(path) === index);
+
+  const seen = new Set<string>();
+  const selectedCandidates: string[] = [];
+  for (const candidate of candidateOrder) {
     if (!files.includes(candidate)) continue;
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
+    selectedCandidates.push(candidate);
+    if (selectedCandidates.length >= 20) {
+      break;
+    }
+  }
+
+  for (const candidate of selectedCandidates) {
     try {
       const { data } = await octokit.repos.getContent({
         owner,
@@ -835,7 +937,7 @@ async function collectRepoSnapshot(
         const decoded = Buffer.from(data.content, "base64").toString("utf-8");
         importantFiles.push({
           path: candidate,
-          snippet: decoded.substring(0, 1500),
+          snippet: decoded.substring(0, 1800),
         });
       }
     } catch (error) {
@@ -845,12 +947,25 @@ async function collectRepoSnapshot(
 
   const frameworks = detectFrameworks({ files, importantFiles });
 
+  const referenceSummary = referenceCandidates
+    .map((group) => {
+      const entries = group.files
+        .slice(0, 50)
+        .map((filePath) => `- ${filePath}`)
+        .join("\n");
+      return `### ${group.category}\n${entries}`;
+    })
+    .join("\n\n");
+
   const promptContext = [
     `Repository: ${owner}/${repo}`,
     `Default branch: ${defaultBranch}`,
     `Total files (${files.length}): ${files.slice(0, 80).join(", ")}`,
+    referenceSummary ? `Reference file candidates:\n${referenceSummary}` : "",
     ...importantFiles.map((file) => `\n--- ${file.path} ---\n${file.snippet}`),
-  ].join("\n\n");
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   return {
     promptContext,
@@ -858,6 +973,7 @@ async function collectRepoSnapshot(
     defaultBranch,
     importantFiles,
     frameworks,
+    referenceCandidates,
   };
 }
 
@@ -920,6 +1036,10 @@ Requirements:
 - Use accessible selectors (text, role, data-testid) where possible.
 - When calling getByRole, always specify the accessible name and include the ARIA level for headings (e.g., level: 1) so the locator remains strict-safe if multiple headings share the same name.
 - Prefer explicit scoping (section/locator hierarchy) when unique names are not guaranteed, and avoid relying on positional CSS selectors.
+- Review the "Reference file candidates" list in the repository context and draw from the files that best capture the primary end-to-end journey.
+- Derive strings (headings, buttons, labels) exactly from the repository context—do not invent new copy. If the text is not present in the provided snippets, use regex or partial matches rather than guessing.
+- Create dedicated test(...) blocks for each major feature route discovered in src/app/*/page.tsx (e.g., homepage, sql-tuner, log-analyzer, code-analyzer). Aim for at least three distinct journeys unless fewer routes exist, and keep tests independent.
+- Tag each test with a descriptive annotation comment (e.g., // @feature sql-tuner) that matches the route name for downstream filtering.
 - Add clear test titles and helpful inline comments describing the intent of each step.
 - Include waits only when necessary and prefer expect-based assertions.
 - Output only the TypeScript code for the test file.

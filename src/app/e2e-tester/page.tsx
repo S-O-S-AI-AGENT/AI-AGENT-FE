@@ -67,6 +67,77 @@ interface ReportData {
 }
 
 const MAX_LOG_CHARACTERS = 15000;
+const MAX_SAVED_CONFIGS = 10;
+
+const escapeHtml = (value: string) =>
+  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+const formatInlineMarkdown = (value: string) => {
+  let result = escapeHtml(value);
+  result = result.replace(
+    /\[([^\]]+?)\]\((https?:\/\/[^\s)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener noreferrer" class="underline decoration-dashed">$1</a>',
+  );
+  result = result.replace(
+    /`([^`]+)`/g,
+    '<code class="llm-inline-code">$1</code>',
+  );
+  result = result.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  result = result.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  result = result.replace(/\n/g, "<br />");
+  return result;
+};
+
+const renderMarkdownBlocks = (value: string) => {
+  const lines = value.split(/\r?\n/);
+  const elements: ReactNode[] = [];
+  let listBuffer: string[] = [];
+
+  const flushList = () => {
+    if (listBuffer.length === 0) return;
+    const listIndex = elements.length;
+    elements.push(
+      <ul key={`list-${listIndex}`} className="mt-2 list-disc space-y-1 pl-5">
+        {listBuffer.map((item, idx) => (
+          <li
+            key={`list-${listIndex}-item-${idx}`}
+            dangerouslySetInnerHTML={{
+              __html: formatInlineMarkdown(item),
+            }}
+          />
+        ))}
+      </ul>,
+    );
+    listBuffer = [];
+  };
+
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList();
+      return;
+    }
+
+    if (/^[-*]\s+/.test(trimmed)) {
+      listBuffer.push(trimmed.replace(/^[-*]\s+/, ""));
+      return;
+    }
+
+    flushList();
+    elements.push(
+      <p
+        key={`para-${index}`}
+        className="mt-2 leading-relaxed"
+        dangerouslySetInnerHTML={{
+          __html: formatInlineMarkdown(trimmed),
+        }}
+      />,
+    );
+  });
+
+  flushList();
+  return elements;
+};
 
 interface SavedConfig {
   id: string;
@@ -232,6 +303,7 @@ export default function E2ETesterPage() {
   const [savedConfigs, setSavedConfigs] = useState<SavedConfig[]>([]);
   const [rememberToken, setRememberToken] = useState(false);
   const logContainerRef = useRef<HTMLDivElement>(null);
+  const hasHydratedPreferences = useRef(false);
 
   const toggleLogExpanded = (logId: string) => {
     setLogs((prevLogs) =>
@@ -274,6 +346,10 @@ export default function E2ETesterPage() {
         console.warn("저장된 설정을 불러오는 중 오류가 발생했습니다.", error);
       }
     }
+    const timer = window.setTimeout(() => {
+      hasHydratedPreferences.current = true;
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -302,6 +378,9 @@ export default function E2ETesterPage() {
   }, [isLoading]);
 
   useEffect(() => {
+    if (!hasHydratedPreferences.current) {
+      return;
+    }
     localStorage.setItem("e2e-tester-remember-token", rememberToken.toString());
     if (!rememberToken) {
       localStorage.removeItem("e2e-tester-token");
@@ -327,18 +406,8 @@ export default function E2ETesterPage() {
     localStorage.setItem("e2e-tester-configs", JSON.stringify(savedConfigs));
   }, [savedConfigs]);
 
-  const upsertSavedConfig = (config: SavedConfig) => {
-    setSavedConfigs((prev) => {
-      const existingIndex = prev.findIndex(
-        (item) => item.repoUrl === config.repoUrl,
-      );
-      if (existingIndex >= 0) {
-        const next = [...prev];
-        next[existingIndex] = config;
-        return next;
-      }
-      return [config, ...prev].slice(0, 5);
-    });
+  const addSavedConfig = (config: SavedConfig) => {
+    setSavedConfigs((prev) => [config, ...prev].slice(0, MAX_SAVED_CONFIGS));
   };
 
   const handleSaveConfig = () => {
@@ -355,7 +424,7 @@ export default function E2ETesterPage() {
       token: rememberToken ? githubToken : undefined,
       createdAt: new Date().toISOString(),
     };
-    upsertSavedConfig(newConfig);
+    addSavedConfig(newConfig);
   };
 
   const handleApplyConfig = (config: SavedConfig) => {
@@ -1156,73 +1225,89 @@ export default function E2ETesterPage() {
                         </p>
                       )}
 
-                      <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                      <div className="mt-4 space-y-4">
                         {report.workflowAnalysis.rootCauses.length > 0 && (
-                          <div
+                          <section
                             className={cn(
-                              "rounded-xl p-4",
+                              "rounded-2xl border p-4",
                               isDarkMode
-                                ? "bg-rose-950/40 text-rose-200"
-                                : "bg-rose-50 text-rose-700",
+                                ? "border-rose-900/40 bg-rose-950/30 text-rose-200"
+                                : "border-rose-200/40 bg-rose-50 text-rose-700",
                             )}
                           >
-                            <h5 className="text-xs font-bold uppercase tracking-wide">
-                              원인 분석
-                            </h5>
-                            <ul className="mt-2 space-y-1 pl-4 text-sm list-disc">
+                            <header className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide">
+                              <Icons.AlertTriangle className="h-4 w-4" /> 원인
+                              분석
+                            </header>
+                            <ul className="mt-3 space-y-2 pl-4 text-sm list-disc">
                               {report.workflowAnalysis.rootCauses.map(
                                 (cause, index) => (
-                                  <li key={`cause-${index}`}>{cause}</li>
+                                  <li
+                                    key={`cause-${index}`}
+                                    dangerouslySetInnerHTML={{
+                                      __html: formatInlineMarkdown(cause),
+                                    }}
+                                  />
                                 ),
                               )}
                             </ul>
-                          </div>
+                          </section>
                         )}
 
                         {report.workflowAnalysis.resolutionSteps.length > 0 && (
-                          <div
+                          <section
                             className={cn(
-                              "rounded-xl p-4",
+                              "rounded-2xl border p-4",
                               isDarkMode
-                                ? "bg-emerald-950/40 text-emerald-200"
-                                : "bg-emerald-50 text-emerald-700",
+                                ? "border-emerald-900/40 bg-emerald-950/30 text-emerald-200"
+                                : "border-emerald-200/40 bg-emerald-50 text-emerald-700",
                             )}
                           >
-                            <h5 className="text-xs font-bold uppercase tracking-wide">
-                              해결 방법
-                            </h5>
-                            <ol className="mt-2 list-decimal space-y-1 pl-4 text-sm">
+                            <header className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide">
+                              <Icons.CheckCircle className="h-4 w-4" /> 해결
+                              방법
+                            </header>
+                            <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm">
                               {report.workflowAnalysis.resolutionSteps.map(
                                 (stepItem, index) => (
-                                  <li key={`resolution-${index}`}>
-                                    {stepItem}
-                                  </li>
+                                  <li
+                                    key={`resolution-${index}`}
+                                    dangerouslySetInnerHTML={{
+                                      __html: formatInlineMarkdown(stepItem),
+                                    }}
+                                  />
                                 ),
                               )}
                             </ol>
-                          </div>
+                          </section>
                         )}
 
                         {report.workflowAnalysis.risks.length > 0 && (
-                          <div
+                          <section
                             className={cn(
-                              "rounded-xl p-4",
+                              "rounded-2xl border p-4",
                               isDarkMode
-                                ? "bg-amber-950/40 text-amber-200"
-                                : "bg-amber-50 text-amber-700",
+                                ? "border-amber-900/40 bg-amber-950/30 text-amber-200"
+                                : "border-amber-200/40 bg-amber-50 text-amber-700",
                             )}
                           >
-                            <h5 className="text-xs font-bold uppercase tracking-wide">
-                              남은 리스크
-                            </h5>
-                            <ul className="mt-2 space-y-1 pl-4 text-sm list-disc">
+                            <header className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide">
+                              <Icons.AlertCircle className="h-4 w-4" /> 남은
+                              리스크
+                            </header>
+                            <ul className="mt-3 space-y-2 pl-4 text-sm list-disc">
                               {report.workflowAnalysis.risks.map(
                                 (risk, index) => (
-                                  <li key={`risk-${index}`}>{risk}</li>
+                                  <li
+                                    key={`risk-${index}`}
+                                    dangerouslySetInnerHTML={{
+                                      __html: formatInlineMarkdown(risk),
+                                    }}
+                                  />
                                 ),
                               )}
                             </ul>
-                          </div>
+                          </section>
                         )}
                       </div>
 
@@ -1238,9 +1323,11 @@ export default function E2ETesterPage() {
                           <h5 className="text-xs font-bold uppercase tracking-wide">
                             상세 보고서
                           </h5>
-                          <p className="mt-2 whitespace-pre-wrap leading-relaxed">
-                            {report.workflowAnalysis.fullReport}
-                          </p>
+                          <div className="mt-2 space-y-2">
+                            {renderMarkdownBlocks(
+                              report.workflowAnalysis.fullReport,
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
