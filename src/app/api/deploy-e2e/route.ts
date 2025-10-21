@@ -918,6 +918,8 @@ Requirements:
 - Use the imported { test, expect } from "@playwright/test".
 - Cover the most critical end-to-end flow (landing page -> key action -> result validation).
 - Use accessible selectors (text, role, data-testid) where possible.
+- When calling getByRole, always specify the accessible name and include the ARIA level for headings (e.g., level: 1) so the locator remains strict-safe if multiple headings share the same name.
+- Prefer explicit scoping (section/locator hierarchy) when unique names are not guaranteed, and avoid relying on positional CSS selectors.
 - Add clear test titles and helpful inline comments describing the intent of each step.
 - Include waits only when necessary and prefer expect-based assertions.
 - Output only the TypeScript code for the test file.
