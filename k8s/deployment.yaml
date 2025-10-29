@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-agent-fe
+  namespace: ai-agent-fe
+  labels:
+    app: ai-agent-fe
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ai-agent-fe
+  template:
+    metadata:
+      labels:
+        app: ai-agent-fe
+    spec:
+      containers:
+        - name: ai-agent-fe
+          # Replace the image below with your registry tag: <REGISTRY>/ai-agent-fe:<TAG>
+          image: <YOUR_REGISTRY>/ai-agent-fe:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+              name: http
+          envFrom:
+            - secretRef:
+                name: ai-agent-fe-secrets
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+      # Optional: imagePullSecrets if your registry requires auth
+      # imagePullSecrets:
+      #   - name: reg-credentials
