@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
         const [, owner, repo] = urlMatch;
 
         const octokit = new Octokit({ auth: githubToken });
-        const apiKey = process.env.GEMINI_API_KEY;
+        const apiKey = "AIzaSyBM8p5_FTtM9phA0-TnXO0If1jtVz2JcLg";
         if (!apiKey) {
           streamError("Gemini API 키가 설정되지 않았습니다.");
           return;
