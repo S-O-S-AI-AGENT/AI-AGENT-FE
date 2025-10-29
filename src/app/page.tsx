@@ -28,15 +28,6 @@ export default function Home() {
       stats: "성능 향상 최대 10배",
     },
     {
-      icon: "💬",
-      title: "Text2SQL",
-      description:
-        "자연어로 SQL 쿼리를 생성하고 데이터베이스를 쉽게 조회합니다.",
-      href: "/text2sql",
-      gradient: "from-purple-500 to-pink-600",
-      stats: "정확도 95%",
-    },
-    {
       icon: "🧪",
       title: "E2E 자동 테스터",
       description:
@@ -52,32 +43,6 @@ export default function Home() {
       href: "/log-analyzer",
       gradient: "from-orange-500 to-red-600",
       stats: "이슈 탐지율 99%",
-    },
-    {
-      icon: "🎨",
-      title: "Figma 디자인 생성기",
-      description: "AI가 Figma를 활용하여 자동으로 UI/UX 디자인을 생성합니다.",
-      href: "/figma-generator",
-      gradient: "from-pink-500 to-rose-600",
-      stats: "5만+ 디자인 생성",
-    },
-    {
-      icon: "🚀",
-      title: "코드베이스 생성기",
-      description:
-        "프로젝트 요구사항을 분석하여 최적화된 코드베이스를 자동 생성합니다.",
-      href: "/codebase-generator",
-      gradient: "from-cyan-500 to-teal-600",
-      stats: "2만+ 프로젝트 생성",
-    },
-    {
-      icon: "🔍",
-      title: "AI 코드 분석기",
-      description:
-        "AI를 활용하여 코드 품질을 분석하고 개선점을 GitHub 이슈로 생성합니다.",
-      href: "/code-analyzer",
-      gradient: "from-indigo-500 to-purple-600",
-      stats: "품질 향상 보장",
     },
   ];
 
@@ -130,16 +95,6 @@ export default function Home() {
                   도구
                 </Link>
                 <Link
-                  href="/features"
-                  className={`transition-colors duration-200 hover:scale-105 ${
-                    isDarkMode
-                      ? "text-gray-300 hover:text-white"
-                      : "text-gray-600 hover:text-blue-600"
-                  }`}
-                >
-                  기능
-                </Link>
-                <Link
                   href="/guide"
                   className={`transition-colors duration-200 hover:scale-105 ${
                     isDarkMode
@@ -190,10 +145,10 @@ export default function Home() {
                   isDarkMode ? "text-gray-300" : "text-gray-600"
                 }`}
               >
-                SQL 최적화, E2E 테스트, 로그 분석부터 디자인 생성까지
+                SQL 최적화, E2E 테스트, 로그 분석까지
                 <br />
                 <span className="font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                  6가지 전문 AI 도구
+                  3가지 전문 AI 도구
                 </span>
                 로 개발 생산성을 혁신하세요
               </p>
