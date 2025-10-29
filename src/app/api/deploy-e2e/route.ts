@@ -1118,15 +1118,38 @@ async function waitForWorkflowRun({
 }) {
   const start = Date.now();
   let lastSignature = "";
-  for (let attempt = 0; attempt < 60; attempt += 1) {
+  let pollCount = 0;
+  // 무제한 대기 (워크플로우가 완료될 때까지)
+  while (true) {
+    pollCount++;
     await new Promise((resolve) => setTimeout(resolve, 10000));
+
+    // 브랜치 필터 없이 모든 최근 워크플로우 검색 (더 넓은 범위)
     const runs = await octokit.actions.listWorkflowRunsForRepo({
       owner,
       repo,
-      branch,
-      per_page: 50,
+      per_page: 100, // 더 많은 결과 가져오기
     });
 
+    // 디버그: 모든 워크플로우 run 확인
+    if (pollCount % 3 === 0) {
+      // 30초마다 디버그 로그
+      const recentCommits = runs.data.workflow_runs
+        .slice(0, 5)
+        .map((r) => `${r.head_sha.substring(0, 7)} (${r.status})`)
+        .join(", ");
+
+      onPoll({
+        message: `폴링 중... (${pollCount}회차) - 총 ${runs.data.workflow_runs.length}개의 워크플로우 확인됨`,
+        details: [
+          { label: "찾는 커밋", value: commitSha.substring(0, 7) },
+          { label: "브랜치", value: branch },
+          { label: "최근 커밋들", value: recentCommits },
+        ],
+      });
+    }
+
+    // 커밋 SHA로 워크플로우 찾기
     const workflowRun = runs.data.workflow_runs.find(
       (run: (typeof runs.data.workflow_runs)[number]) =>
         run.head_sha === commitSha,
@@ -1212,8 +1235,6 @@ async function waitForWorkflowRun({
       }
     }
   }
-
-  throw new Error("워크플로우 실행이 10분 내에 완료되지 않았습니다.");
 }
 
 type WorkflowJobsSummary = {
