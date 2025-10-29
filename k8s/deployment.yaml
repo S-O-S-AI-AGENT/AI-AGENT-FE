@@ -18,7 +18,7 @@ spec:
       containers:
         - name: ai-agent-fe
           # Replace the image below with your registry tag: <REGISTRY>/ai-agent-fe:<TAG>
-          image: <YOUR_REGISTRY>/ai-agent-fe:latest
+          image: sos-reg.kr.ncr.ntruss.com//ai-agent-fe:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
