@@ -74,3 +74,20 @@ body {
 .focus-ring {
   @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-900;
 }
+
+.llm-inline-code {
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo,
+    Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-weight: 600;
+  color: #111827;
+  background: rgba(99, 102, 241, 0.12);
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.4rem;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.dark .llm-inline-code {
+  color: #f8fafc;
+  background: rgba(99, 102, 241, 0.35);
+  border-color: rgba(129, 140, 248, 0.45);
+}
