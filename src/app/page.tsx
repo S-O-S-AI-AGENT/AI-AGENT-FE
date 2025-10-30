@@ -23,9 +23,10 @@ export default function Home() {
       icon: "🛠️",
       title: "SQL 튜너",
       description: "AI 기반으로 SQL 쿼리를 최적화하고 성능을 개선합니다.",
-      href: "/sql-tuner",
+      href: "http://vaatz-tuner-vaatz-tuner--20e49-112305685-f25b4e832f9a.kr.lb.naverncp.com/dashboard",
       gradient: "from-blue-500 to-cyan-600",
       stats: "성능 향상 최대 10배",
+      external: true,
     },
     {
       icon: "🧪",
@@ -328,7 +329,11 @@ export default function Home() {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-10 max-w-7xl mx-auto">
             {features.map((feature, index) => (
-              <Link key={index} href={feature.href} className="group block">
+              <Link 
+                key={index} 
+                href={feature.href} 
+                className="group block"
+              >
                 <div
                   className={`h-full p-10 rounded-3xl transition-all duration-300 hover:scale-105 ${
                     isDarkMode
