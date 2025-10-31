@@ -535,7 +535,31 @@ export default function E2ETesterPage() {
             errorMessage:
               readError instanceof Error ? readError.message : String(readError),
             timestamp: new Date().toISOString(),
+            totalMessagesReceived: messageCount,
           });
+          
+          // ERR_INCOMPLETE_CHUNKED_ENCODING 에러 처리
+          if (
+            readError instanceof Error &&
+            (readError.message.includes("INCOMPLETE_CHUNKED") ||
+              readError.message.includes("network"))
+          ) {
+            console.warn(
+              "[E2E Tester] 청크 인코딩 불완전 - 수신된 데이터로 계속 진행",
+            );
+            setLogs((prev) => [
+              ...prev,
+              {
+                id: `warn-${Date.now()}`,
+                level: "warning",
+                message: `네트워크 연결이 중간에 끊어졌습니다. 지금까지 받은 ${messageCount}개의 메시지로 계속 진행합니다.`,
+                timestamp: new Date().toISOString(),
+              },
+            ]);
+            // 에러를 던지지 않고 루프 종료
+            break;
+          }
+          
           throw readError;
         }
 
@@ -611,7 +635,13 @@ export default function E2ETesterPage() {
 
       if (error instanceof Error) {
         if (error.name === "AbortError") {
-          errorMessage = "요청 시간이 초과되었습니다 (5분). 저장소가 너무 크거나 서버 응답이 느릴 수 있습니다.";
+          errorMessage =
+            "요청 시간이 초과되었습니다 (5분). 저장소가 너무 크거나 서버 응답이 느릴 수 있습니다.";
+        } else if (
+          error.message.includes("INCOMPLETE_CHUNKED") ||
+          error.message.includes("ERR_INCOMPLETE_CHUNKED_ENCODING")
+        ) {
+          errorMessage = `청크 전송 중단: 서버에서 데이터를 전송하다가 연결이 끊어졌습니다. 클라우드 환경의 프록시/로드밸런서 타임아웃 설정을 확인하세요. (받은 메시지: ${messageCount || 0}개)`;
         } else if (error.message.includes("Failed to fetch")) {
           errorMessage = `네트워크 연결 실패: ${error.message}. 클라우드 환경에서는 프록시/로드밸런서 설정을 확인하세요.`;
         } else if (error.message.includes("NetworkError")) {

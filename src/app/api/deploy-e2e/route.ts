@@ -99,23 +99,45 @@ export async function POST(request: NextRequest) {
       const encoder = new TextEncoder();
       const writer = {
         write: (chunk: string) => {
+          if (streamClosed) {
+            console.warn(`[${requestId}] 닫힌 스트림에 쓰기 시도 무시`);
+            return false;
+          }
           try {
             controller.enqueue(encoder.encode(chunk));
+            return true;
           } catch (enqueueError) {
             console.error(
               `[${requestId}] 스트림 쓰기 실패:`,
               enqueueError,
             );
+            streamClosed = true; // 쓰기 실패 시 스트림을 닫힌 것으로 처리
+            return false;
           }
         },
         close: () => {
+          if (streamClosed) {
+            console.log(`[${requestId}] 스트림 이미 닫힘`);
+            return;
+          }
           try {
+            // 스트림 종료 전 마지막 개행 추가 (청크 완료 신호)
+            controller.enqueue(encoder.encode("\n"));
             controller.close();
+            console.log(`[${requestId}] 스트림 정상 종료`);
           } catch (closeError) {
             console.error(
               `[${requestId}] 스트림 종료 실패:`,
               closeError,
             );
+            // 종료 실패해도 계속 진행
+            try {
+              controller.error(closeError);
+            } catch (e) {
+              // 에러 전송도 실패하면 무시
+            }
+          } finally {
+            streamClosed = true;
           }
         },
       };
@@ -125,9 +147,8 @@ export async function POST(request: NextRequest) {
 
       const closeStream = () => {
         if (!streamClosed) {
-          console.log(`[${requestId}] 스트림 종료 (총 메시지: ${messageCount})`);
+          console.log(`[${requestId}] 스트림 종료 시도 (총 메시지: ${messageCount})`);
           writer.close();
-          streamClosed = true;
         }
       };
 
@@ -177,19 +198,30 @@ export async function POST(request: NextRequest) {
       };
 
       // Heartbeat: 클라우드 환경에서 연결 유지를 위한 정기적 신호
-      const heartbeatInterval = setInterval(() => {
-        if (streamClosed) {
+      let heartbeatInterval: NodeJS.Timeout | null = null;
+      
+      const startHeartbeat = () => {
+        heartbeatInterval = setInterval(() => {
+          if (streamClosed) {
+            if (heartbeatInterval) clearInterval(heartbeatInterval);
+            return;
+          }
+          // 주석 형태로 heartbeat 전송 (클라이언트는 무시)
+          const success = writer.write(`: heartbeat ${Date.now()}\n\n`);
+          if (!success) {
+            console.error(`[${requestId}] Heartbeat 전송 실패, 인터벌 중지`);
+            if (heartbeatInterval) clearInterval(heartbeatInterval);
+          }
+        }, 15000); // 15초마다
+      };
+
+      const stopHeartbeat = () => {
+        if (heartbeatInterval) {
           clearInterval(heartbeatInterval);
-          return;
+          heartbeatInterval = null;
+          console.log(`[${requestId}] Heartbeat 중지`);
         }
-        // 주석 형태로 heartbeat 전송 (클라이언트는 무시)
-        try {
-          writer.write(`: heartbeat ${Date.now()}\n\n`);
-        } catch (error) {
-          console.error(`[${requestId}] Heartbeat 전송 실패:`, error);
-          clearInterval(heartbeatInterval);
-        }
-      }, 15000); // 15초마다
+      };
 
       const safeRun = async (fn: () => Promise<void>) => {
         try {
@@ -207,12 +239,16 @@ export async function POST(request: NextRequest) {
             timestamp: new Date().toISOString(),
           });
           streamError(message, error);
-          clearInterval(heartbeatInterval);
+          stopHeartbeat();
           throw error;
         }
       };
 
       try {
+        // Heartbeat 시작 (연결 유지)
+        startHeartbeat();
+        console.log(`[${requestId}] Heartbeat 시작됨`);
+
         const urlMatch = repoUrl.match(/github\.com\/(.+?)\/(.+?)(?:\.git)?$/);
         if (!urlMatch) {
           streamError("유효하지 않은 GitHub 저장소 URL입니다.");
@@ -816,10 +852,36 @@ jobs:
           });
         }
       } finally {
-        clearInterval(heartbeatInterval);
+        console.log(`[${requestId}] Finally 블록 진입`);
+        
+        // 1. Heartbeat 먼저 중지
+        stopHeartbeat();
+        
+        // 2. 마지막 상태 메시지 전송 시도 (스트림이 열려있다면)
+        if (!streamClosed) {
+          try {
+            streamMessage({
+              log: {
+                level: "info",
+                message: "자동화 프로세스 종료",
+                timestamp: new Date().toISOString(),
+              },
+            });
+          } catch (finalMessageError) {
+            console.warn(
+              `[${requestId}] 최종 메시지 전송 실패:`,
+              finalMessageError,
+            );
+          }
+        }
+        
+        // 3. 스트림 종료 (여러 번 호출해도 안전)
         closeStream();
+        
+        // 4. 요청 처리 완료 로그
         console.log(`[${requestId}] 요청 처리 완료:`, {
           totalMessages: messageCount,
+          streamClosed,
           duration: Date.now() - parseInt(requestId.split("-")[1]),
           timestamp: new Date().toISOString(),
         });
