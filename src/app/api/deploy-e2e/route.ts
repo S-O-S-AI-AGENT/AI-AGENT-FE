@@ -74,28 +74,78 @@ interface RepoSnapshot {
 const MODEL_ID = "gemini-2.5-pro";
 
 export async function POST(request: NextRequest) {
-  const { repoUrl, githubToken } = await request.json();
+  const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  console.log(`[${requestId}] POST 요청 시작:`, new Date().toISOString());
+
+  let requestBody;
+  try {
+    requestBody = await request.json();
+    console.log(`[${requestId}] 요청 본문 파싱 완료:`, {
+      repoUrl: requestBody.repoUrl,
+      hasToken: !!requestBody.githubToken,
+    });
+  } catch (parseError) {
+    console.error(`[${requestId}] 요청 본문 파싱 실패:`, parseError);
+    return new Response(
+      JSON.stringify({ error: "잘못된 요청 형식입니다." }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  const { repoUrl, githubToken } = requestBody;
 
   const stream = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder();
       const writer = {
-        write: (chunk: string) => controller.enqueue(encoder.encode(chunk)),
-        close: () => controller.close(),
+        write: (chunk: string) => {
+          try {
+            controller.enqueue(encoder.encode(chunk));
+          } catch (enqueueError) {
+            console.error(
+              `[${requestId}] 스트림 쓰기 실패:`,
+              enqueueError,
+            );
+          }
+        },
+        close: () => {
+          try {
+            controller.close();
+          } catch (closeError) {
+            console.error(
+              `[${requestId}] 스트림 종료 실패:`,
+              closeError,
+            );
+          }
+        },
       };
 
       let streamClosed = false;
+      let messageCount = 0;
 
       const closeStream = () => {
         if (!streamClosed) {
+          console.log(`[${requestId}] 스트림 종료 (총 메시지: ${messageCount})`);
           writer.close();
           streamClosed = true;
         }
       };
 
       const streamMessage = (payload: object) => {
-        if (streamClosed) return;
-        writer.write(`data: ${JSON.stringify(payload)}\n\n`);
+        if (streamClosed) {
+          console.warn(
+            `[${requestId}] 이미 닫힌 스트림에 메시지 전송 시도:`,
+            payload,
+          );
+          return;
+        }
+        messageCount++;
+        const message = `data: ${JSON.stringify(payload)}\n\n`;
+        console.log(`[${requestId}] 메시지 #${messageCount}:`, {
+          type: Object.keys(payload)[0],
+          timestamp: new Date().toISOString(),
+        });
+        writer.write(message);
       };
 
       const streamResponse = (step: Step, data: object = {}) => {
@@ -111,15 +161,35 @@ export async function POST(request: NextRequest) {
         streamMessage({ log: enriched });
       };
 
-      const streamError = (error: string) => {
+      const streamError = (error: string, details?: unknown) => {
+        console.error(`[${requestId}] 에러 스트림:`, error, details);
         streamMessage({ error });
         closeStream();
       };
 
       const streamResult = (summary: AutomationSummary) => {
+        console.log(`[${requestId}] 결과 스트림:`, {
+          status: summary.status,
+          workflowUrl: summary.workflowUrl,
+        });
         streamMessage({ result: summary });
         closeStream();
       };
+
+      // Heartbeat: 클라우드 환경에서 연결 유지를 위한 정기적 신호
+      const heartbeatInterval = setInterval(() => {
+        if (streamClosed) {
+          clearInterval(heartbeatInterval);
+          return;
+        }
+        // 주석 형태로 heartbeat 전송 (클라이언트는 무시)
+        try {
+          writer.write(`: heartbeat ${Date.now()}\n\n`);
+        } catch (error) {
+          console.error(`[${requestId}] Heartbeat 전송 실패:`, error);
+          clearInterval(heartbeatInterval);
+        }
+      }, 15000); // 15초마다
 
       const safeRun = async (fn: () => Promise<void>) => {
         try {
@@ -129,8 +199,15 @@ export async function POST(request: NextRequest) {
             error instanceof Error
               ? error.message
               : "알 수 없는 오류가 발생했습니다.";
-          console.error("자동화 오류:", error);
-          streamError(message);
+          console.error(`[${requestId}] 자동화 오류:`, {
+            error,
+            errorName: error instanceof Error ? error.name : "Unknown",
+            errorMessage: message,
+            errorStack: error instanceof Error ? error.stack : undefined,
+            timestamp: new Date().toISOString(),
+          });
+          streamError(message, error);
+          clearInterval(heartbeatInterval);
           throw error;
         }
       };
@@ -259,10 +336,68 @@ export async function POST(request: NextRequest) {
             ],
           });
 
-          const scriptResult = await genAI.models.generateContent({
-            model: MODEL_ID,
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-          });
+          // Gemini API 호출 with 재시도 로직
+          let scriptResult;
+          const maxRetries = 3;
+          let lastError;
+
+          for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+              console.log(
+                `[${requestId}] Gemini API 호출 시도 ${attempt}/${maxRetries}`,
+              );
+
+              const apiCallPromise = genAI.models.generateContent({
+                model: MODEL_ID,
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
+              });
+
+              // 2분 타임아웃 설정
+              const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(
+                  () =>
+                    reject(
+                      new Error(
+                        `Gemini API 호출 타임아웃 (시도 ${attempt}/${maxRetries})`,
+                      ),
+                    ),
+                  120000,
+                ),
+              );
+
+              scriptResult = await Promise.race([
+                apiCallPromise,
+                timeoutPromise,
+              ]);
+
+              console.log(
+                `[${requestId}] Gemini API 호출 성공 (시도 ${attempt})`,
+              );
+              break; // 성공하면 루프 종료
+            } catch (apiError) {
+              lastError = apiError;
+              console.error(
+                `[${requestId}] Gemini API 호출 실패 (시도 ${attempt}/${maxRetries}):`,
+                apiError,
+              );
+
+              if (attempt < maxRetries) {
+                const waitTime = attempt * 2000; // 2초, 4초씩 증가
+                streamLog({
+                  title: `LLM 호출 재시도 (${attempt}/${maxRetries})`,
+                  message: `API 호출에 실패했습니다. ${waitTime / 1000}초 후 재시도합니다.`,
+                  level: "warning",
+                });
+                await new Promise((resolve) => setTimeout(resolve, waitTime));
+              }
+            }
+          }
+
+          if (!scriptResult) {
+            throw new Error(
+              `Gemini API 호출 실패 (${maxRetries}번 재시도): ${lastError instanceof Error ? lastError.message : String(lastError)}`,
+            );
+          }
 
           // 보조: 원본 LLM 응답 전체를 보관
           const rawLLMResponse = JSON.stringify(scriptResult, null, 2);
@@ -643,11 +778,51 @@ jobs:
           }
         });
       } catch (error) {
+        console.error(`[${requestId}] 최종 에러 캐치:`, {
+          error,
+          errorType: error?.constructor?.name,
+          errorName: error instanceof Error ? error.name : "Unknown",
+          errorMessage: error instanceof Error ? error.message : String(error),
+          errorStack: error instanceof Error ? error.stack : undefined,
+          timestamp: new Date().toISOString(),
+        });
+
         if (error instanceof Error) {
-          console.error("자동화 중단:", error.message);
+          // 특정 에러 타입별 상세 메시지
+          let detailedMessage = error.message;
+          
+          if (error.message.includes("ECONNRESET")) {
+            detailedMessage = `연결이 재설정되었습니다: ${error.message}. 클라우드 환경에서는 로드밸런서 또는 프록시 타임아웃 설정을 확인하세요.`;
+          } else if (error.message.includes("ETIMEDOUT")) {
+            detailedMessage = `연결 시간 초과: ${error.message}. GitHub API 또는 Gemini API 응답이 느릴 수 있습니다.`;
+          } else if (error.message.includes("ENOTFOUND")) {
+            detailedMessage = `DNS 조회 실패: ${error.message}. 네트워크 연결을 확인하세요.`;
+          } else if (error.message.includes("socket hang up")) {
+            detailedMessage = `소켓 연결 종료: ${error.message}. 클라우드 프록시가 장시간 연결을 끊었을 가능성이 있습니다.`;
+          }
+
+          streamLog({
+            title: "자동화 실패",
+            message: detailedMessage,
+            level: "error",
+            details: [
+              { label: "에러 타입", value: error.name },
+              { label: "에러 메시지", value: error.message },
+              {
+                label: "스택 트레이스",
+                value: error.stack?.substring(0, 500) || "없음",
+              },
+            ],
+          });
         }
       } finally {
+        clearInterval(heartbeatInterval);
         closeStream();
+        console.log(`[${requestId}] 요청 처리 완료:`, {
+          totalMessages: messageCount,
+          duration: Date.now() - parseInt(requestId.split("-")[1]),
+          timestamp: new Date().toISOString(),
+        });
       }
     },
   });
@@ -655,8 +830,10 @@ jobs:
   return new Response(stream, {
     headers: {
       "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
+      "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
+      "X-Accel-Buffering": "no", // Nginx에서 버퍼링 비활성화
+      "Transfer-Encoding": "chunked", // 청크 전송 명시
     },
   });
 }
@@ -837,26 +1014,32 @@ async function collectRepoSnapshot(
   owner: string,
   repo: string,
 ): Promise<RepoSnapshot> {
-  const repoMeta = await octokit.repos.get({ owner, repo });
-  const defaultBranch = repoMeta.data.default_branch;
+  try {
+    console.log(`[collectRepoSnapshot] 저장소 메타데이터 조회: ${owner}/${repo}`);
+    const repoMeta = await octokit.repos.get({ owner, repo });
+    const defaultBranch = repoMeta.data.default_branch;
+    console.log(`[collectRepoSnapshot] 기본 브랜치: ${defaultBranch}`);
 
-  const { data: tree } = await octokit.git.getTree({
-    owner,
-    repo,
-    tree_sha: defaultBranch,
-    recursive: "1",
-  });
+    console.log(`[collectRepoSnapshot] Git tree 조회 시작`);
+    const { data: tree } = await octokit.git.getTree({
+      owner,
+      repo,
+      tree_sha: defaultBranch,
+      recursive: "1",
+    });
+    console.log(`[collectRepoSnapshot] Git tree 항목 수: ${tree.tree.length}`);
 
-  const treeNodes = tree.tree as Array<{
-    path?: string | null;
-    type?: string | null;
-  }>;
-  const files: string[] = [];
-  for (const node of treeNodes) {
-    if (node.type === "blob" && typeof node.path === "string") {
-      files.push(node.path);
+    const treeNodes = tree.tree as Array<{
+      path?: string | null;
+      type?: string | null;
+    }>;
+    const files: string[] = [];
+    for (const node of treeNodes) {
+      if (node.type === "blob" && typeof node.path === "string") {
+        files.push(node.path);
+      }
     }
-  }
+    console.log(`[collectRepoSnapshot] 총 파일 수: ${files.length}`);
 
   const importantFiles: { path: string; snippet: string }[] = [];
 
@@ -967,6 +1150,12 @@ async function collectRepoSnapshot(
     .filter(Boolean)
     .join("\n\n");
 
+  console.log(`[collectRepoSnapshot] 스냅샷 생성 완료:`, {
+    fileCount: files.length,
+    importantFilesCount: importantFiles.length,
+    frameworksCount: frameworks.length,
+  });
+
   return {
     promptContext,
     fileCount: files.length,
@@ -975,6 +1164,16 @@ async function collectRepoSnapshot(
     frameworks,
     referenceCandidates,
   };
+  } catch (error) {
+    console.error(`[collectRepoSnapshot] 에러 발생:`, {
+      error,
+      errorName: error instanceof Error ? error.name : "Unknown",
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+    throw new Error(
+      `저장소 분석 실패: ${error instanceof Error ? error.message : String(error)}. GitHub API 연결을 확인하세요.`,
+    );
+  }
 }
 
 function detectFrameworks({

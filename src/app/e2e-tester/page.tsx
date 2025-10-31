@@ -452,24 +452,102 @@ export default function E2ETesterPage() {
     setReport(null);
     setStep("analyzing");
 
+    // 네트워크 타임아웃 감지를 위한 변수
+    let lastActivityTime = Date.now();
+    const NETWORK_TIMEOUT = 60000; // 60초 동안 응답이 없으면 타임아웃
+
+    // 타임아웃 체크 인터벌
+    const timeoutChecker = setInterval(() => {
+      const elapsed = Date.now() - lastActivityTime;
+      if (elapsed > NETWORK_TIMEOUT) {
+        console.error(`네트워크 타임아웃: ${elapsed}ms 동안 응답 없음`);
+        setLogs((prev) => [
+          ...prev,
+          createErrorLog(
+            `네트워크 타임아웃: ${Math.round(elapsed / 1000)}초 동안 서버 응답이 없습니다. 클라우드 환경의 프록시/로드밸런서가 연결을 끊었을 가능성이 있습니다.`,
+          ),
+        ]);
+      }
+    }, 10000); // 10초마다 체크
+
     try {
+      console.log("[E2E Tester] 요청 시작:", {
+        repoUrl,
+        hasToken: !!githubToken,
+        timestamp: new Date().toISOString(),
+      });
+
+      const controller = new AbortController();
+      const fetchTimeout = setTimeout(() => {
+        controller.abort();
+        console.error("[E2E Tester] Fetch 타임아웃 (5분)");
+      }, 300000); // 5분 타임아웃
+
       const response = await fetch("/api/deploy-e2e", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ repoUrl, githubToken }),
+        signal: controller.signal,
       });
 
+      clearTimeout(fetchTimeout);
+      lastActivityTime = Date.now();
+
+      console.log("[E2E Tester] 응답 수신:", {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+        timestamp: new Date().toISOString(),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("[E2E Tester] HTTP 에러:", {
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText,
+        });
+        throw new Error(
+          `서버 에러 (${response.status}): ${errorText || response.statusText}`,
+        );
+      }
+
       if (!response.body) {
-        throw new Error("서버로부터 응답을 받지 못했습니다.");
+        throw new Error("서버로부터 응답 본문을 받지 못했습니다.");
       }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let messageCount = 0;
+
+      console.log("[E2E Tester] 스트림 읽기 시작");
 
       while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        let readResult;
+        try {
+          readResult = await reader.read();
+          lastActivityTime = Date.now(); // 데이터 수신 시 활동 시간 갱신
+        } catch (readError) {
+          console.error("[E2E Tester] 스트림 읽기 에러:", {
+            error: readError,
+            errorName: readError instanceof Error ? readError.name : "Unknown",
+            errorMessage:
+              readError instanceof Error ? readError.message : String(readError),
+            timestamp: new Date().toISOString(),
+          });
+          throw readError;
+        }
+
+        const { done, value } = readResult;
+
+        if (done) {
+          console.log("[E2E Tester] 스트림 종료:", {
+            totalMessages: messageCount,
+            timestamp: new Date().toISOString(),
+          });
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
@@ -480,6 +558,19 @@ export default function E2ETesterPage() {
           const dataStr = line.substring(6);
           try {
             const data = JSON.parse(dataStr);
+            messageCount++;
+            lastActivityTime = Date.now();
+
+            console.log(`[E2E Tester] 메시지 #${messageCount}:`, {
+              hasStep: !!data.step,
+              hasLog: !!data.log,
+              hasError: !!data.error,
+              hasResult: !!data.result,
+              step: data.step,
+              logLevel: data.log?.level,
+              timestamp: new Date().toISOString(),
+            });
+
             if (data.step) {
               setStep(data.step);
             }
@@ -487,6 +578,7 @@ export default function E2ETesterPage() {
               setLogs((prev) => [...prev, normalizeLog(data.log)]);
             }
             if (data.error) {
+              console.error("[E2E Tester] 서버 에러 수신:", data.error);
               setLogs((prev) => [...prev, createErrorLog(data.error)]);
               setStep("error");
             }
@@ -497,19 +589,52 @@ export default function E2ETesterPage() {
               setStep("done");
             }
           } catch (parseError) {
-            console.error("스트림 데이터를 파싱하지 못했습니다:", parseError);
+            console.error("[E2E Tester] JSON 파싱 에러:", {
+              error: parseError,
+              rawData: dataStr.substring(0, 200),
+              timestamp: new Date().toISOString(),
+            });
           }
         }
       }
     } catch (error) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "알 수 없는 오류가 발생했습니다.";
-      setLogs((prev) => [...prev, createErrorLog(errorMessage)]);
+      console.error("[E2E Tester] 최종 에러:", {
+        error,
+        errorType: error?.constructor?.name,
+        errorName: error instanceof Error ? error.name : "Unknown",
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+        timestamp: new Date().toISOString(),
+      });
+
+      let errorMessage = "알 수 없는 오류가 발생했습니다.";
+
+      if (error instanceof Error) {
+        if (error.name === "AbortError") {
+          errorMessage = "요청 시간이 초과되었습니다 (5분). 저장소가 너무 크거나 서버 응답이 느릴 수 있습니다.";
+        } else if (error.message.includes("Failed to fetch")) {
+          errorMessage = `네트워크 연결 실패: ${error.message}. 클라우드 환경에서는 프록시/로드밸런서 설정을 확인하세요.`;
+        } else if (error.message.includes("NetworkError")) {
+          errorMessage = `네트워크 에러: ${error.message}. 서버와의 연결이 끊어졌습니다.`;
+        } else {
+          errorMessage = error.message;
+        }
+      }
+
+      setLogs((prev) => [
+        ...prev,
+        createErrorLog(errorMessage),
+        createErrorLog(
+          `상세 정보: ${error instanceof Error ? error.name : typeof error} - ${String(error)}`,
+        ),
+      ]);
       setStep("error");
     } finally {
+      clearInterval(timeoutChecker);
       setIsLoading(false);
+      console.log("[E2E Tester] 요청 완료:", {
+        timestamp: new Date().toISOString(),
+      });
     }
   };
 
