@@ -41,9 +41,10 @@ export default function Home() {
       icon: "📊",
       title: "로그 분석기",
       description: "시스템 로그를 분석하여 이슈와 패턴을 자동으로 탐지합니다.",
-      href: "/log-analyzer",
+      href: "http://default-sos-codetuner-se-dc488-112492429-313a544323e2.kr.lb.naverncp.com/admin/dashboard",
       gradient: "from-orange-500 to-red-600",
       stats: "이슈 탐지율 99%",
+      external: true,
     },
   ];
 
