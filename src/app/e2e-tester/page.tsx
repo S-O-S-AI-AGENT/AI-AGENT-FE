@@ -455,6 +455,7 @@ export default function E2ETesterPage() {
     // 네트워크 타임아웃 감지를 위한 변수
     let lastActivityTime = Date.now();
     const NETWORK_TIMEOUT = 60000; // 60초 동안 응답이 없으면 타임아웃
+    let messageCount = 0; // catch 블록에서도 접근할 수 있도록 함수 스코프로 이동
 
     // 타임아웃 체크 인터벌
     const timeoutChecker = setInterval(() => {
@@ -519,7 +520,6 @@ export default function E2ETesterPage() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let messageCount = 0;
 
       console.log("[E2E Tester] 스트림 읽기 시작");
 

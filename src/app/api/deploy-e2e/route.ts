@@ -373,9 +373,11 @@ export async function POST(request: NextRequest) {
           });
 
           // Gemini API 호출 with 재시도 로직
-          let scriptResult;
+          let scriptResult: Awaited<
+            ReturnType<typeof genAI.models.generateContent>
+          > | null = null;
           const maxRetries = 3;
-          let lastError;
+          let lastError: unknown;
 
           for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
@@ -389,7 +391,7 @@ export async function POST(request: NextRequest) {
               });
 
               // 2분 타임아웃 설정
-              const timeoutPromise = new Promise((_, reject) =>
+              const timeoutPromise = new Promise<never>((_, reject) =>
                 setTimeout(
                   () =>
                     reject(
