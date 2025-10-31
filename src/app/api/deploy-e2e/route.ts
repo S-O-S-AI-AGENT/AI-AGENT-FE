@@ -1182,9 +1182,14 @@ async function collectRepoSnapshot(
       });
       if ("content" in data && data.content) {
         const decoded = Buffer.from(data.content, "base64").toString("utf-8");
+        
+        // 페이지 파일은 더 많은 코드를 포함 (헤딩 레벨을 정확히 추출하기 위해)
+        const isPageFile = candidate.endsWith("/page.tsx") || candidate.endsWith("/page.jsx");
+        const maxLength = isPageFile ? 5000 : 1800;
+        
         importantFiles.push({
           path: candidate,
-          snippet: decoded.substring(0, 1800),
+          snippet: decoded.substring(0, maxLength),
         });
       }
     } catch (error) {
@@ -1293,19 +1298,51 @@ Detected frameworks: ${snapshot.frameworks.join(", ")}
 
 Write a single Playwright test file in TypeScript that validates the primary user journey of the application.
 
+⚠️ CRITICAL RULES - TEXT EXTRACTION:
+1. **READ THE ACTUAL CODE CAREFULLY** - The repository context below contains the EXACT source code.
+2. **COPY TEXT VERBATIM** from the code snippets - do NOT paraphrase, translate, or modify ANY text.
+3. **VERIFY HEADING LEVELS** - Check if it's <h1> (level: 1), <h2> (level: 2), etc. in the actual code.
+4. **INCLUDE EMOJIS** if they appear in the original text (e.g., "📊 AI 기반 로그 분석").
+5. **DO NOT INVENT** text that doesn't exist in the code. If unsure, use partial text matching.
+
+REAL EXAMPLE FROM THIS REPOSITORY (log-analyzer/page.tsx):
+Code snippet shows:
+  <h2 className="text-4xl font-bold mb-4">
+    📊 AI 기반 로그 분석
+  </h2>
+
+CORRECT test selector:
+  getByRole('heading', { name: '📊 AI 기반 로그 분석', level: 2 })
+  // Note: It's <h2>, so level: 2 (NOT level: 1)
+
+WRONG test selectors:
+  getByRole('heading', { name: 'AI 기반 로그 분석기', level: 1 }) ❌
+  // Wrong: (1) different text '분석기', (2) wrong level, (3) missing emoji
+
+⚠️ FEATURE DETECTION RULES:
+1. **ONLY test features that ACTUALLY EXIST** in the repository code.
+2. Scan src/app/*/page.tsx files to find CURRENT active routes.
+3. If a feature directory doesn't exist in the code → DO NOT write test for it.
+
 Requirements:
 - Use the imported { test, expect } from "@playwright/test".
 - Cover the most critical end-to-end flow (landing page -> key action -> result validation).
 - Use accessible selectors (text, role, data-testid) where possible.
-- When calling getByRole, always specify the accessible name and include the ARIA level for headings (e.g., level: 1) so the locator remains strict-safe if multiple headings share the same name.
-- Prefer explicit scoping (section/locator hierarchy) when unique names are not guaranteed, and avoid relying on positional CSS selectors.
-- Review the "Reference file candidates" list in the repository context and draw from the files that best capture the primary end-to-end journey.
-- Derive strings (headings, buttons, labels) exactly from the repository context—do not invent new copy. If the text is not present in the provided snippets, use regex or partial matches rather than guessing.
-- Create dedicated test(...) blocks for each major feature route discovered in src/app/*/page.tsx (e.g., homepage, sql-tuner, log-analyzer, code-analyzer). Aim for at least three distinct journeys unless fewer routes exist, and keep tests independent.
-- Tag each test with a descriptive annotation comment (e.g., // @feature sql-tuner) that matches the route name for downstream filtering.
-- Add clear test titles and helpful inline comments describing the intent of each step.
+- When calling getByRole for headings, **ALWAYS check the exact heading level in the source code** (h1 = level:1, h2 = level:2, etc.).
+- **COPY the exact heading text** from the code, including any emojis or special characters.
+- Review the "Reference file candidates" list and the code snippets below to extract exact text.
+- Only create test(...) blocks for features confirmed to exist in src/app/*/page.tsx files.
+- Tag each test with a descriptive annotation comment (e.g., // @feature log-analyzer).
+- Add clear test titles and helpful inline comments.
 - Include waits only when necessary and prefer expect-based assertions.
 - Output only the TypeScript code for the test file.
+
+STEP-BY-STEP PROCESS:
+1. Read all src/app/*/page.tsx code snippets below
+2. Identify which pages actually exist (e.g., /log-analyzer, /e2e-tester)
+3. For each page, find the EXACT heading text and level from the JSX code
+4. Copy that exact text into your test's getByRole selector
+5. Verify the heading level matches (h1=level:1, h2=level:2)
 
 Repository context:
 ${snapshot.promptContext.substring(0, 32000)}`;

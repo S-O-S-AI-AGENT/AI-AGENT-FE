@@ -70,9 +70,10 @@ export default defineConfig({
 
   /* Run your local/prod server before starting the tests. Let Playwright manage it. */
   webServer: {
-    command: process.env.CI ? "npm run start" : "npm run dev",
+    // Always use dev mode because "output: standalone" is incompatible with "next start"
+    command: "npm run dev",
     url: "http://localhost:3000",
-    reuseExistingServer: true,
+    reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
 });
